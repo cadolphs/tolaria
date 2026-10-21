@@ -272,6 +272,12 @@ Completed asynchronous native byte/directory reads renew the budget without an
 extra timer because they already return control through the native event loop.
 This is not a new mutation queue or a latency guarantee for individual
 large operations (ADR 0209).
+Transport progress deliberately keeps a separate budget from native filesystem
+IO. Renewing its budget on every native promise completion can starve input and
+timers during checkout even when total clone time looks unchanged.
+`gitCloneIoYield.test.ts` protects that independent task boundary and cancellation
+while the progress callback is waiting; do not merge the two budgets as an IO
+optimization without new native responsiveness evidence.
 Checkpoints explicitly stage content before comparing the matrix, protecting
 same-length rapid edits that the library's coarse timestamp shortcut misses.
 This requires a content scan; the measured large-vault sync cost remains a
