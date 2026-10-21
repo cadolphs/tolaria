@@ -25,7 +25,8 @@ type PanOptions = {
   topInset: number
   motion: TabletPanelMotion
   session: SharedValue<TabletPanSession>
-  onSettle: (position: TabletPanelPosition) => void
+  epoch: SharedValue<number>
+  onSettle: (position: TabletPanelPosition, ticket: number) => void
 }
 
 export function createTabletPanGesture(options: PanOptions) {
@@ -35,6 +36,7 @@ export function createTabletPanGesture(options: PanOptions) {
     .onTouchesDown((event) => {
       const touch = event.allTouches[0]
       if (!touch) return
+      options.epoch.value += 1
       session.value = { x: touch.x, y: touch.y, left: motion.left.value, properties: motion.properties.value, mode: 'wait' }
     })
     .onTouchesMove((event, manager) => {
@@ -64,6 +66,7 @@ function isActivePan(mode: TabletDragIntent) {
 
 function beginTabletPan({ motion, session, propertiesReplaceSidebar }: PanOptions) {
   'worklet'
+  if (!isActivePan(session.value.mode)) return
   cancelAnimation(motion.left)
   cancelAnimation(motion.properties)
   session.value = { ...session.value, left: motion.left.value, properties: motion.properties.value }
@@ -77,6 +80,7 @@ function beginTabletPan({ motion, session, propertiesReplaceSidebar }: PanOption
 
 function updateTabletPan({ motion, session, compactTablet, propertiesReplaceSidebar }: PanOptions, dx: number) {
   'worklet'
+  if (!isActivePan(session.value.mode)) return
   const minimum = tabletLeftPanelStageOffset('editor', compactTablet)
   if (session.value.mode === 'left') {
     motion.left.value = Math.max(minimum, Math.min(0, session.value.left + dx))
@@ -90,15 +94,18 @@ function updateTabletPan({ motion, session, compactTablet, propertiesReplaceSide
   }
 }
 
-function settledLeftOffset({ compactTablet, motion, propertiesReplaceSidebar, session }: PanOptions, visible: boolean) {
+function settledLeftOffset(options: PanOptions, visible: boolean) {
   'worklet'
+  const { compactTablet, motion, propertiesReplaceSidebar, session } = options
   if (!propertiesReplaceSidebar || session.value.mode !== 'properties') return motion.left.value
-  return visible ? tabletLeftPanelStageOffset('editor', compactTablet) : motion.restoreLeft.value
+  if (visible) return tabletLeftPanelStageOffset('editor', compactTablet)
+  return motion.restoreLeft.value
 }
 
 function settleTabletPan(options: PanOptions, velocity: number) {
   'worklet'
   const { motion, compactTablet, session, onSettle } = options
+  if (!isActivePan(session.value.mode)) return
   const panelWidth = desktopPanelParity.inspectorWidth
   const projectedProperties = motion.properties.value + velocity * 200
   const visible = session.value.mode === 'properties'
@@ -108,5 +115,5 @@ function settleTabletPan(options: PanOptions, velocity: number) {
   const stage = tabletLeftPanelStageAfterDrag({ compactTablet, stage: 'all', startOffset: targetLeft, dx: 0, vx: session.value.mode === 'left' ? velocity : 0 })
   motion.left.value = withSpring(tabletLeftPanelStageOffset(stage, compactTablet), tabletPanelSpring)
   motion.properties.value = withSpring(visible ? 0 : panelWidth, tabletPanelSpring)
-  runOnJS(onSettle)({ stage, propertiesVisible: visible })
+  runOnJS(onSettle)({ stage, propertiesVisible: visible }, options.epoch.value)
 }

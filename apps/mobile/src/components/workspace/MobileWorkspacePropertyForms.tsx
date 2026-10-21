@@ -121,16 +121,14 @@ function PropertyDeleteAction({ form: props }: WorkspaceFormProps) {
 export function AddRelationshipContent(props: ActionContentProps) {
   const { styles } = useMobileStyles(createThemeStyles)
   const focusedScroll = useFocusedFormScroll()
-  const phone = useMobileDeviceLayout() === 'phone'
   const { compactForm } = props
   return (
     <View style={[styles.formBody, compactForm && phoneSheetStyles.compactBody]}>
       <RelationshipFormHeader form={props} />
       <ScrollView {...focusedScroll} contentContainerStyle={[styles.content, compactForm && phoneSheetStyles.compactContent]} keyboardShouldPersistTaps="handled" style={styles.scrollArea} testID="workspace-relationship-form-scroll">
         <RelationshipFormFields form={props} />
-        <RelationshipFormFooter form={props} visible={!phone} />
       </ScrollView>
-      <RelationshipFormFooter form={props} visible={phone && !compactForm} pinned />
+      <RelationshipFormFooter form={props} visible={!compactForm} pinned />
     </View>
   )
 }

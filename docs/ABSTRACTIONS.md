@@ -513,6 +513,10 @@ and settled accessibility state. Offsets always use desktop panel tokens. Native
 interaction QA is mandatory; web tests cannot verify native responder arbitration.
 See ADR 0195.
 
+Tablet drag sessions are invalidated on window resize, explicit pane actions and
+unmount. Inactive UI-thread callbacks cannot move panes, and generation-tagged
+settlements cannot restore an obsolete layout after crossing the JS boundary.
+
 Editor-interior horizontal drags retain sequential panel navigation. Note-list
 rows own their touch quick actions and leave two-finger trackpad gestures to the
 list's native scrolling. The row's local `useSwipeableNoteActions` hook owns its

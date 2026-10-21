@@ -33,21 +33,24 @@ export function useTabletPanelGestures(options: TabletPanelGestureOptions) {
   const properties = useSharedValue(options.defaultPropertiesVisible ? 0 : desktopPanelParity.inspectorWidth)
   const restoreLeft = useSharedValue(tabletLeftPanelStageOffset(options.defaultSidebarVisible ? 'all' : 'list', compactTablet))
   const session = useSharedValue<TabletPanSession>({ x: 0, y: 0, left: 0, properties: 0, mode: 'wait' })
+  const epoch = useSharedValue(0)
+  const onSettle = useTabletPanelSettlement(epoch, session, setPosition)
   const motion = useMemo(() => ({ left, properties, restoreLeft }), [left, properties, restoreLeft])
   const panGesture = useMemo(() => createTabletPanGesture({
-    compactTablet, propertiesReplaceSidebar, width, topInset, motion, session, onSettle: setPosition,
-  }), [compactTablet, propertiesReplaceSidebar, width, topInset, motion, session])
+    compactTablet, propertiesReplaceSidebar, width, topInset, motion, session, epoch, onSettle,
+  }), [compactTablet, propertiesReplaceSidebar, width, topInset, motion, session, epoch, onSettle])
 
   const settle = useCallback((stage: TabletLeftPanelStage, propertiesVisible: boolean) => {
+    epoch.set(ticket => ticket + 1)
+    session.set({ ...session.get(), mode: 'fail' })
     const normalized = compactTablet && stage === 'all' ? 'list' : stage
     left.set(withSpring(tabletLeftPanelStageOffset(normalized, compactTablet), tabletPanelSpring))
     properties.set(withSpring(propertiesVisible ? 0 : desktopPanelParity.inspectorWidth, tabletPanelSpring))
     setPosition({ stage: normalized, propertiesVisible })
-  }, [compactTablet, left, properties])
+  }, [compactTablet, epoch, left, properties, session])
 
   useWindowResize(width, () => {
     const next = tabletPanelPositionAfterResize(position, width, compactTablet)
-    session.set({ ...session.value, mode: 'fail' })
     settle(next.stage, next.propertiesVisible)
   })
 
@@ -103,6 +106,16 @@ export function useTabletPanelGestures(options: TabletPanelGestureOptions) {
     toggleSidebar: useCallback(() => showLeftStage(showSidebar ? 'list' : 'all'), [showLeftStage, showSidebar]),
     toggleSidebarAndNoteList: useCallback(() => showLeftStage(noteListVisible ? 'editor' : 'all'), [noteListVisible, showLeftStage]),
   }
+}
+
+function useTabletPanelSettlement(epoch: SharedValue<number>, session: SharedValue<TabletPanSession>, onSettle: (position: TabletPanelPosition) => void) {
+  useLayoutEffect(() => () => {
+    epoch.set(ticket => ticket + 1)
+    session.set({ ...session.get(), mode: 'fail' })
+  }, [epoch, session])
+  return useCallback((position: TabletPanelPosition, ticket: number) => {
+    if (epoch.get() === ticket) onSettle(position)
+  }, [epoch, onSettle])
 }
 
 function sidebarReplacesList(options: TabletPanelGestureOptions, width: number) {
