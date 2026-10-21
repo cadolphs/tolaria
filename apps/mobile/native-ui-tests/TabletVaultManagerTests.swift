@@ -6,7 +6,7 @@ final class TabletVaultManagerTests: XCTestCase {
     let app = openManager()
     cancelFolderSelection(app)
     cancelFolderSelection(app)
-    app.buttons["Close"].firstMatch.tap()
+    app.buttons["Close settings"].firstMatch.tap()
     XCTAssertTrue(element(app, "open-mobile-settings").waitForExistence(timeout: 5))
   }
 
@@ -24,7 +24,7 @@ final class TabletVaultManagerTests: XCTestCase {
     let screenshot = XCTAttachment(screenshot: app.screenshot())
     screenshot.lifetime = .keepAlways
     add(screenshot)
-    app.buttons["Close"].firstMatch.tap()
+    app.buttons["Close settings"].firstMatch.tap()
     expectation(for: NSPredicate { _, _ in !manager.exists }, evaluatedWith: nil)
     waitForExpectations(timeout: 5)
     XCTAssertTrue(element(app, "open-mobile-settings").exists)
@@ -44,9 +44,6 @@ final class TabletVaultManagerTests: XCTestCase {
     openSettings.tap()
     let settings = element(app, "mobile-settings")
     XCTAssertTrue(settings.waitForExistence(timeout: 5))
-    let vaults = element(app, "settings-manage-vaults")
-    if !vaults.isHittable { settings.swipeUp() }
-    vaults.tap()
     XCTAssertTrue(element(app, "vault-manager").waitForExistence(timeout: 5))
     return app
   }
@@ -68,6 +65,6 @@ final class TabletVaultManagerTests: XCTestCase {
     cancel.tap()
     expectation(for: NSPredicate { _, _ in open.exists && open.isEnabled }, evaluatedWith: nil)
     waitForExpectations(timeout: 10)
-    XCTAssertTrue(app.buttons["Close"].firstMatch.exists)
+    XCTAssertTrue(app.buttons["Close settings"].firstMatch.exists)
   }
 }

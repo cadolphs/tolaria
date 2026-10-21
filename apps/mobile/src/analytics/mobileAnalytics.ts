@@ -5,6 +5,7 @@ export type MobileAnalyticsEvent =
   | { name: 'mobile_update_channel_selected'; channel: 'stable' | 'alpha'; outcome: 'idle' | 'checking' | 'downloading' | 'ready' | 'current' | 'unavailable' | 'failed' | 'restarting' }
   | { name: 'note_created' | 'note_deleted' | 'vault_opened' | 'vault_switched' | 'search_used' | 'commit_made' }
   | { name: 'mobile_git_clone_cancel_requested' }
+  | { name: 'mobile_folder_open_failed'; stage: 'picker' | 'import' | 'catalog' | 'prepare' }
   | { name: 'file_preview_opened' | 'file_preview_failed'; preview_kind: 'image' | 'pdf' }
   | { name: 'theme_mode_changed'; mode: 'system' | 'light' | 'dark' }
   | { name: 'mobile_note_swipe_used'; action: 'favorite' | 'archive' | 'delete' }
@@ -54,6 +55,7 @@ export function createMobileAnalytics({ configured, createId, platform, context,
 
 // Select properties explicitly: never spread caller objects into telemetry.
 function eventProperties(event: MobileAnalyticsEvent): Record<string, string> {
+  if (event.name === 'mobile_folder_open_failed') return { stage: event.stage }
   if (event.name === 'mobile_update_channel_selected') return { channel: event.channel, outcome: event.outcome }
   return workspaceEventProperties(event)
 }

@@ -8,6 +8,7 @@ import { runSavedVaultOperation } from './savedVaultOperation'
 import { useGitHubAccount } from './useGitHubAccount'
 import { useManagedVaultCatalog, type ActiveVault } from './useManagedVaultCatalog'
 import { githubFailure } from './githubFailure'
+import { FolderOpenFailure, folderOpenMessage } from '../folderOpenFailure'
 import { createGitVault, type GitAuthor } from './gitVault'
 import { withSavedWorkspace } from './workspaceWriteQueue'
 import { useMobileSettings } from '../../settings/useMobileSettings'
@@ -31,7 +32,7 @@ import type { ManagedLocalVault } from './managedLocalVaults'
 import { usePreparedVaultRefresh } from './usePreparedVaultRefresh'
 
 export type { VaultSyncState } from '../syncLedgerModel'
-type VaultError = ReturnType<typeof githubFailure> | 'mobile.vaults.saveFailed' | 'mobile.vaults.folderUnavailable' | 'mobile.vaults.folderConflict' | null
+type VaultError = ReturnType<typeof githubFailure> | ReturnType<typeof folderOpenMessage> | 'mobile.vaults.saveFailed' | 'mobile.vaults.folderUnavailable' | 'mobile.vaults.folderConflict' | null
 
 export function useMobileVaults() {
   const catalog = useManagedVaultCatalog()
@@ -77,11 +78,11 @@ export function useMobileVaults() {
     setBusy(true)
     if (present) setOpened(true)
     setError(null)
-    syncHistory.setProblem(null)
   }
   const handleOperationFailure = (failure: unknown, saved: boolean, present: boolean, signal?: AbortSignal) => {
     const interruption = operationInterruption(failure, signal)
     if (interruption) { setStatus('pending'); return interruption }
+    if (failure instanceof FolderOpenFailure) { setError(folderOpenMessage(failure)); return 'failed' }
     const kind = syncFailureKind(failure)
     syncHistory.setProblem(kind)
     const result = vaultFailure(saved, failure)
@@ -102,6 +103,8 @@ export function useMobileVaults() {
     running.current = true
     const networkSync = Boolean(active.git && (operation === 'sync' || operation === 'autoSync'))
     beginOperation(present, networkSync, operation)
+    // A catalog dialog must not erase the active vault's existing sync problem.
+    if (!isCatalogOperation(present, operation)) syncHistory.setProblem(null)
     let next = active
     let saved = false
     try {
@@ -300,6 +303,10 @@ function operationInterruption(failure: unknown, signal?: AbortSignal) {
 function operationRetry(outcome: 'retry' | 'deferred' | 'failed' | 'cancelled') {
   if (outcome === 'retry') return { retry: true }
   if (outcome === 'deferred') return { deferred: true }
+}
+
+function isCatalogOperation(present: boolean, operation?: 'commit' | 'sync' | 'autoSync') {
+  return present && !operation
 }
 
 function activeVaultId(active: ActiveVault) {

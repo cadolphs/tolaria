@@ -1201,6 +1201,9 @@ files:
     mobile.vaults.folderLinked: 07df69bbc8a45a1c0ed7b5272d2873b4
     mobile.vaults.folderOpenHint: 99a81fb10d794ab2f77e4d33414722e0
     mobile.vaults.folderUnavailable: bbd38c55e4d5a5362d55b7b3eee06258
+    mobile.vaults.folderPickerFailed: 9981fbb7b172e0830556f5aeaeafd402
+    mobile.vaults.folderReadFailed: fa2ceb5de9ed98d9318c17e423416f9b
+    mobile.vaults.folderCatalogFailed: 7748b1cff52344eacd3660a1cee22846
     mobile.vaults.folderConflict: 7f8ec0868832b7f1d263aa1e861edd2b
     mobile.vaults.localCopy: aa20c1d667c2ef2eb659ff3c2b11697c
     mobile.vaults.sessionFolder: 957a1315ef9c0afeb8de62a2e72335c7

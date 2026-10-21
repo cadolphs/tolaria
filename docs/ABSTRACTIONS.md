@@ -857,6 +857,16 @@ security-scoped bookmarks through `TolariaWorkspaceAccess`; Expo Go access remai
 session-scoped. Explicit QA sources and deterministic probes take precedence over
 remembered user data. The Laputa development bridge is read-only and rejects writes.
 
+`folderOpenFailure.ts` keeps cancellation separate from folder-open failures.
+Known native cancellation codes (or the legacy exact cancellation message) stay
+quiet; provider/picker, selected-folder import, catalog and preparation failures
+carry a categorical stage to localized recovery copy. A failed folder attempt
+does not replace the in-memory active selection or its existing sync history.
+Consent-gated `mobile_folder_open_failed` sends only the stage, never the native
+error, provider name, URI or filenames. Existing linked-folder coordination and
+file preservation are unchanged; native picker availability and physical Files
+provider behavior still require separate device acceptance.
+
 `localVaultSnapshot.ts` converts scanned Markdown files, folder paths and
 `views/*.yml` into `MobileWorkspaceSnapshot`: type-color inheritance, Type metadata
 and raw content, instance schema/defaults, relationship values, Markdown previews,

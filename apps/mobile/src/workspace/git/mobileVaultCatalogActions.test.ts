@@ -6,6 +6,7 @@ import { activateManagedLocalVault, rememberLocalVault } from './managedLocalSto
 import { nativeGitHttp } from './nativeGitHttp'
 import type { ActiveVault } from './useManagedVaultCatalog'
 import type { GitCloneControl } from './useGitCloneProgress'
+import { FolderOpenFailure } from '../folderOpenFailure'
 
 vi.mock('../nativeWorkspacePicker', () => ({ pickNativeWorkspaceDirectory: vi.fn() }))
 vi.mock('./managedGitStorage', () => ({
@@ -158,4 +159,19 @@ it('propagates real clone failures to the recovery owner without activating the 
   expect(h.catalog.reload).not.toHaveBeenCalled()
   expect(activateManagedGitVault).not.toHaveBeenCalled()
   expect(h.capture).not.toHaveBeenCalled()
+})
+
+it.each([
+  { stage: 'picker', reject: () => vi.mocked(pickNativeWorkspaceDirectory).mockRejectedValue(new Error('private')) },
+  { stage: 'import', reject: () => vi.mocked(pickNativeWorkspaceDirectory).mockRejectedValue(new FolderOpenFailure('import', 'private')) },
+  { stage: 'catalog', reject: () => vi.mocked(rememberLocalVault).mockRejectedValue(new Error('private')) },
+  { stage: 'prepare', reject: () => vi.mocked(activateManagedLocalVault).mockRejectedValue(new Error('private')) },
+])('reports only the $stage failure category, never a successful folder open', async ({ stage, reject }) => {
+  const h = harness()
+  const active = h.active
+  reject()
+  await expect(h.actions.openFolder()).rejects.toMatchObject({ stage })
+  expect(h.capture).toHaveBeenCalledExactlyOnceWith({ name: 'mobile_folder_open_failed', stage })
+  expect(h.active).toBe(active)
+  expect(forgetManagedVault).not.toHaveBeenCalled()
 })

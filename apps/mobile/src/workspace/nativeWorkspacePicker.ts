@@ -7,6 +7,7 @@ import {
   type NativeWorkspaceAccessModule,
 } from './nativeWorkspaceAccess'
 import type { NativeWorkspaceIndex } from './nativeWorkspaceAccess'
+import { folderOpenStep, FolderOpenFailure, isFolderPickerCancellation } from './folderOpenFailure'
 
 export type NativeWorkspaceSelection = {
   selectedNoteId?: string
@@ -50,7 +51,7 @@ export async function pickNativeWorkspaceDirectoryWithDependencies(
   initialUri?: string | null,
 ): Promise<NativeWorkspaceSelection | null> {
   if (module?.pickAndImportWorkspace) {
-    const imported = await pickAndImportNativeWorkspace(module)
+    const imported = await folderOpenStep('import', () => pickAndImportNativeWorkspace(module))
     return imported
       ? nativeWorkspaceSelectionFromDirectory({ index: imported.index, name: imported.label, uri: imported.uri })
       : null
@@ -60,8 +61,8 @@ export async function pickNativeWorkspaceDirectoryWithDependencies(
   if (!picked) return null
   if (!module) return picked
 
-  const imported = await importNativeWorkspace(picked.vaultRootUri, module)
-  if (!imported) throw new Error('workspaceImportFailed')
+  const imported = await folderOpenStep('import', () => importNativeWorkspace(picked.vaultRootUri, module))
+  if (!imported) throw new FolderOpenFailure('import', new Error('workspaceImportFailed'))
   return nativeWorkspaceSelectionFromDirectory({ index: imported.index, name: imported.label, uri: imported.uri })
 }
 
@@ -79,9 +80,12 @@ export async function pickNativeWorkspaceDirectoryWithPicker(
   initialUri?: string,
 ): Promise<NativeWorkspaceSelection | null> {
   try {
-    return nativeWorkspaceSelectionFromDirectory(await pickDirectory(initialUri))
-  } catch {
-    return null
+    const selection = nativeWorkspaceSelectionFromDirectory(await pickDirectory(initialUri))
+    if (!selection) throw new Error('folderSelectionInvalid')
+    return selection
+  } catch (failure) {
+    if (isFolderPickerCancellation(failure)) return null
+    throw new FolderOpenFailure('picker', failure)
   }
 }
 
