@@ -7,11 +7,11 @@ import { useMobileStyles } from '../ui/theme/useMobileTheme'
 import type { MobileColors } from '../ui/theme/mobilePalette'
 import type { MobileMetrics } from '../ui/mobileMetrics'
 import type { useMobileUpdateChannel } from './useMobileUpdateChannel'
+import { mobileUpdateDiagnostics } from './mobileUpdateDiagnostics'
 
 export function MobileUpdateSettings({ updates }: { updates: ReturnType<typeof useMobileUpdateChannel> }) {
   const { styles } = useMobileStyles(createStyles)
-  const current = updates.runtime.channel === 'stable' ? mobileText('settings.releaseStable') : mobileText('settings.releaseAlpha')
-  const version = updates.runtime.updateId?.slice(0, 8) ?? mobileText('mobile.updates.embedded')
+  const diagnostics = mobileUpdateDiagnostics(updates.runtime, updates)
   return <View style={styles.section} testID="settings-update-channel">
     <Text style={styles.heading}>{mobileText('settings.releaseChannel')}</Text>
     <View accessibilityRole="radiogroup" accessibilityLabel={mobileText('settings.releaseChannel')} style={styles.options}>
@@ -22,21 +22,20 @@ export function MobileUpdateSettings({ updates }: { updates: ReturnType<typeof u
         disabled={updates.disabled} testID={`settings-update-${channel}`}
         onPress={() => { void updates.select(channel) }} />)}
     </View>
-    <Text style={styles.detail} testID="settings-update-running">{updates.runtime.available
-      ? mobileText('mobile.updates.running').replace('{channel}', current).replace('{update}', version)
-      : mobileText('mobile.updates.disabled')}</Text>
-    <UpdateStatus updates={updates} />
+    <Text selectable style={styles.detail} testID="settings-update-build">{diagnostics.build}</Text>
+    <Text selectable style={styles.detail} testID="settings-update-running">{diagnostics.running}</Text>
+    <Text selectable style={styles.detail} testID="settings-update-runtime">{diagnostics.runtime}</Text>
+    <UpdateStatus status={diagnostics.status} failed={updates.phase === 'failed'} />
+    {diagnostics.checked && <Text style={styles.detail} testID="settings-update-checked">{diagnostics.checked}</Text>}
     <UpdateAction updates={updates} />
   </View>
 }
 
-function UpdateStatus({ updates }: { updates: ReturnType<typeof useMobileUpdateChannel> }) {
+function UpdateStatus({ status, failed }: { status: string; failed: boolean }) {
   const { styles } = useMobileStyles(createStyles)
-  if (updates.phase === 'idle') return null
-  const failed = updates.phase === 'failed'
   return <Text accessibilityRole={failed ? 'alert' : undefined}
-    accessibilityLiveRegion="polite" style={[styles.detail, failed && styles.error]}>
-    {mobileText(`mobile.updates.${updates.phase}`)}</Text>
+    accessibilityLiveRegion="polite" style={[styles.detail, failed && styles.error]} testID="settings-update-status">
+    {status}</Text>
 }
 
 function UpdateAction({ updates }: { updates: ReturnType<typeof useMobileUpdateChannel> }) {

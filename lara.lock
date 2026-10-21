@@ -1255,14 +1255,19 @@ files:
     mobile.updates.running: fa1ac96fdf7926c3139110433662416b
     mobile.updates.embedded: e9c3feda2e1e27c3d27f01b9de86e5c3
     mobile.updates.disabled: 5b5b535d5527e4cb1f2790cef14d6fdc
-    mobile.updates.idle: d41d8cd98f00b204e9800998ecf8427e
+    mobile.updates.idle: f676cc89b3e11cbf516e55873f82185a
     mobile.updates.checking: f2bff594bc4c6fcf13337d2b6a10e27e
     mobile.updates.downloading: cf7b626dc1dfa66a2157a278070d80c6
     mobile.updates.ready: 90f6fa4a81490ab3c2783dd55761128a
-    mobile.updates.current: 0e5a1bc2c259fd89dcca3393aa51a9a2
+    mobile.updates.current: 25e744cddd6bf9ae5b14234b121ffc97
     mobile.updates.unavailable: aebd1588b3431aa2257544ee31248410
     mobile.updates.failed: 347c1a5ecf02e6d798bdf62bce3a9f7b
     mobile.updates.restarting: 337c0621fbffe75c357bfd4a73bfde61
+    mobile.updates.nativeBuild: 69ffc5aa2829db8928877fe60e8602a6
+    mobile.updates.runningOta: e07ee48ca31c6f1420465db01d7c0379
+    mobile.updates.runtime: 66406daf2ae2334df881130996d2fd60
+    mobile.updates.unknown: 88183b946cc5f0e8c96b2e66e1c74a7e
+    mobile.updates.checkedAt: 305d0009091f0aa6c097cd66558857a9
     mobile.settings.autoGitForeground: f3d51fb15349a4ae1ad8daa999a93931
     mobile.settings.scale: 168bab01e06b4267f0bb861ade5ffd42
     mobile.settings.scaleDefault: eb6d8ae6f20283755b339c0dc273988b

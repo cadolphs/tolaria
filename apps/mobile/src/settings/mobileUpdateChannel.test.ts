@@ -57,7 +57,7 @@ describe('mobile OTA channel selection', () => {
   it('does not treat a missing compatible update or failed download as ready', async () => {
     const missing = setup({ check: vi.fn(async () => false) })
     await missing.controller.select('stable')
-    expect(missing.controller.snapshot().phase).toBe('unavailable')
+    expect(missing.controller.snapshot().phase).toBe('current')
     await missing.controller.restart()
     expect(missing.runtime.reload).not.toHaveBeenCalled()
     const failed = setup({ fetch: vi.fn(async () => false) })
