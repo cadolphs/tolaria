@@ -1,9 +1,8 @@
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { addedLinesFromDiff, biomeGateFailures, eslintGateFailures } from './codacy-gate-lib.mjs'
-import { sarifGateFailures } from './codacy-sarif.mjs'
+import { scannerOutputFailures } from './codacy-sarif.mjs'
 import { partitionApprovedReports } from './codacy-approved-reports.mjs'
 
 const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim()
@@ -40,53 +39,45 @@ if (install.status !== 0) {
   process.exit(1)
 }
 
-const temporaryDirectory = mkdtempSync(join(tmpdir(), 'tolaria-codacy-'))
 const failures = []
-try {
-  const changedFiles = [...additions.keys()].map((path) => path.slice(root.length + 1)).filter((path) => existsSync(resolve(root, path)))
-  const biome = spawnSync('pnpm', ['exec', 'biome', 'lint', ...changedFiles, '--reporter=json', '--max-diagnostics=none'], {
+const deletedFiles = new Set(execFileSync('git', ['ls-files', '--deleted'], { cwd: root, encoding: 'utf8' }).split('\n'))
+const changedFiles = [...additions.keys()].map((path) => path.slice(root.length + 1)).filter((path) => !deletedFiles.has(path))
+const biome = spawnSync('pnpm', ['exec', 'biome', 'lint', ...changedFiles, '--reporter=json', '--max-diagnostics=none'], {
+  cwd: root,
+  encoding: 'utf8',
+})
+if (!biome.stdout) failures.push({ message: 'Biome did not produce an analysis report', tool: 'Biome' })
+else failures.push(...biomeGateFailures(JSON.parse(biome.stdout), additions, root))
+
+const eslintFiles = changedFiles.filter(path => /\.(?:[cm]?js|jsx|ts|tsx)$/u.test(path))
+if (eslintFiles.length > 0) {
+  const eslint = spawnSync(process.execPath, [
+    'node_modules/eslint8/bin/eslint.js',
+    '--config',
+    'eslint.codacy.config.js',
+    '--format',
+    'json',
+    ...eslintFiles,
+  ], { cwd: root, encoding: 'utf8' })
+  if (!eslint.stdout || (eslint.status !== 0 && eslint.status !== 1)) {
+    failures.push({ message: 'security ESLint scanner did not produce a valid report', tool: 'Codacy ESLint security rules' })
+  } else {
+    try {
+      failures.push(...eslintGateFailures(JSON.parse(eslint.stdout), additions))
+    } catch {
+      failures.push({ message: 'security ESLint report was not valid JSON', tool: 'Codacy ESLint security rules' })
+    }
+  }
+}
+
+for (const tool of ['opengrep', 'trivy']) {
+  const result = spawnSync(cli, ['analyze', '.', '--tool', tool, '--format', 'sarif'], {
     cwd: root,
     encoding: 'utf8',
+    env: scannerEnvironment,
+    maxBuffer: 20 * 1024 * 1024,
   })
-  if (!biome.stdout) failures.push({ message: 'Biome did not produce an analysis report', tool: 'Biome' })
-  else failures.push(...biomeGateFailures(JSON.parse(biome.stdout), additions, root))
-
-  const eslintFiles = changedFiles.filter(path => /\.(?:[cm]?js|jsx|ts|tsx)$/u.test(path))
-  if (eslintFiles.length > 0) {
-    const eslint = spawnSync(process.execPath, [
-      'node_modules/eslint8/bin/eslint.js',
-      '--config',
-      'eslint.codacy.config.js',
-      '--format',
-      'json',
-      ...eslintFiles,
-    ], { cwd: root, encoding: 'utf8' })
-    if (!eslint.stdout || (eslint.status !== 0 && eslint.status !== 1)) {
-      failures.push({ message: 'security ESLint scanner did not produce a valid report', tool: 'Codacy ESLint security rules' })
-    } else {
-      try {
-        failures.push(...eslintGateFailures(JSON.parse(eslint.stdout), additions))
-      } catch {
-        failures.push({ message: 'security ESLint report was not valid JSON', tool: 'Codacy ESLint security rules' })
-      }
-    }
-  }
-
-  for (const tool of ['opengrep', 'trivy']) {
-    const output = join(temporaryDirectory, `${tool}.sarif`)
-    const result = spawnSync(cli, ['analyze', '.', '--tool', tool, '--format', 'sarif', '--output', output], {
-      cwd: root,
-      encoding: 'utf8',
-      env: scannerEnvironment,
-    })
-    if (result.status !== 0 || !existsSync(output)) {
-      failures.push({ message: `${tool} exited unsuccessfully`, tool })
-      continue
-    }
-    failures.push(...sarifGateFailures(JSON.parse(readFileSync(output, 'utf8')), additions, root))
-  }
-} finally {
-  rmSync(temporaryDirectory, { force: true, recursive: true })
+  failures.push(...scannerOutputFailures(result, additions, root, tool))
 }
 
 const reports = partitionApprovedReports(failures, root, {
