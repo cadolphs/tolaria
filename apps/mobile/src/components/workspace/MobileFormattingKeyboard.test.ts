@@ -43,6 +43,8 @@ vi.mock('phosphor-react-native', () => ({ Check: () => null, DotsThree: () => nu
 vi.mock('./mobileFormattingCommands', () => ({ formattingCommands: [
   { action: 'bold', label: 'Bold', testID: 'editor-format-bold', icon: () => null },
   { action: 'heading2', label: 'Heading 2', testID: 'editor-format-heading-2', icon: () => null },
+  { action: 'wikilink', label: 'Insert wikilink', testID: 'editor-format-wikilink', icon: () => null },
+  { action: 'strike', label: 'Strikethrough', testID: 'editor-format-strike', icon: () => null },
 ] }))
 
 const roots: ReturnType<typeof createRoot>[] = []
@@ -104,7 +106,34 @@ it('keeps the full tablet strip and does not add phone-only keyboard chrome', as
   expect(host.querySelector('[data-testid="editor-format-menu-headings"]')).toBeNull()
   expect(host.querySelector('[data-testid="editor-format-heading-2"]')).not.toBeNull()
   expect(host.querySelector('[data-testid="editor-hide-keyboard-action"]')).toBeNull()
+  expect(host.querySelector('[data-testid="editor-format-wikilink"]')).not.toBeNull()
+  expect(host.querySelector('[data-testid="editor-formatting-fixed-actions"]')).toBeNull()
 })
+
+it('pins insert, more and dismiss outside the scrolling phone actions in that order', async () => {
+  keyboard.visible = true
+  const format = vi.fn()
+  const host = await mount(createElement(MobileMarkdownFormattingToolbar, { onFormat: format }))
+  const fixed = requiredElement(host, 'editor-formatting-fixed-actions')
+  const scroller = requiredElement(host, 'editor-formatting-actions')
+  expect(fixed.style.flexShrink).toBe('0')
+  const controls = [...fixed.querySelectorAll<HTMLButtonElement>('button[data-testid^="editor-format-menu-"], button[data-testid="editor-hide-keyboard-action"]')]
+  expect(controls.map(button => button.dataset.testid)).toEqual([
+    'editor-format-menu-insert', 'editor-format-menu-more', 'editor-hide-keyboard-action',
+  ])
+  expect(controls.every(button => !scroller.contains(button))).toBe(true)
+  const insert = requiredElement(fixed, 'editor-format-options-insert')
+  await act(async () => requiredElement(insert, 'editor-format-wikilink').click())
+  expect(format).toHaveBeenCalledExactlyOnceWith('wikilink')
+  await act(async () => requiredElement(fixed, 'editor-format-strike').click())
+  expect(format).toHaveBeenLastCalledWith('strike')
+})
+
+function requiredElement(host: ParentNode, id: string) {
+  const element = host.querySelector<HTMLElement>(`[data-testid="${id}"]`)
+  if (!element) throw new Error(`Missing toolbar element: ${id}`)
+  return element
+}
 
 async function mount(children: ReactNode) {
   const host = document.createElement('div')

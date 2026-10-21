@@ -12,7 +12,7 @@ import { probeProps, type MobileLayoutProbe } from '../../qa/mobileLayoutProbe'
 
 import type { MobileMarkdownFormatAction } from '../../workspace/mobileMarkdownFormatting'
 import { formattingCommands, type FormattingCommand } from './mobileFormattingCommands'
-import { formattingToolbarGroups, formattingToolbarTouchSize, type FormattingToolbarGroup } from './mobileFormattingToolbarModel'
+import { formattingToolbarGroups, formattingToolbarTouchSize } from './mobileFormattingToolbarModel'
 import { useMobileKeyboardInset } from '../../ui/useMobileBottomInset'
 import { mobilePaneFooterFrame, mobilePaneFooterRowHeight } from './mobilePaneFooterLayout'
 
@@ -55,15 +55,20 @@ export function MobileCompactFormattingToolbar(props: Props) {
             <PrimaryAction command={commands.get(action)} selected={props.selected.includes(action)} onFormat={props.onFormat} />
           </View>
         ))}
-        {(Object.keys(menus) as (Exclude<FormattingToolbarGroup, 'primary'>)[]).map((group) => (
+        {(['headings', 'lists', 'table'] as const).map((group) => (
           groups[group].length ? <FormattingMenu key={group} group={group} actions={groups[group]} toolbar={props} /> : null
         ))}
       </ScrollView>
+      <View style={styles.fixedActions} testID="editor-formatting-fixed-actions">
+        {(['insert', 'more'] as const).map((group) => (
+          groups[group].length ? <FormattingMenu key={group} group={group} actions={groups[group]} toolbar={props} /> : null
+        ))}
       {keyboardVisible && <Button accessibilityLabel={mobileText('editor.formatting.hideKeyboard')} variant="ghost" size="icon"
         style={styles.action} testID="editor-hide-keyboard-action" onPress={() => (props.onDismissKeyboard ?? Keyboard.dismiss)()}>
         <KeyboardIcon size={24} color={mobileColors.textMuted} />
         <CaretDown size={10} color={mobileColors.textMuted} />
       </Button>}
+      </View>
     </View>
   )
 }
@@ -124,6 +129,7 @@ function createThemeStyles(mobileColors: MobileColors, metrics: MobileMetrics) {
   const { space: mobileSpace } = metrics
   const styles = StyleSheet.create({
     container: { flexDirection: 'row' },
+    fixedActions: { flexDirection: 'row', flexShrink: 0, alignItems: 'center', gap: mobileSpace.xs },
     viewport: { flex: 1, minWidth: 0, height: mobilePaneFooterRowHeight },
     row: { ...mobilePaneFooterFrame(), flexDirection: 'row', gap: mobileSpace.xs },
     action: { width: formattingToolbarTouchSize, height: formattingToolbarTouchSize, minWidth: formattingToolbarTouchSize,

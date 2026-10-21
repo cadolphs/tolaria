@@ -5,6 +5,27 @@ final class MobileFormattingKeyboardTests: XCTestCase {
   func testRichFormattingDismissalAndDraftSurviveRotation() throws { try verify(mode: "wysiwyg") }
   func testSourceFormattingDismissalAndDraftSurviveRotation() throws { try verify(mode: "source") }
 
+  func testTabletKeepsWideFormattingActions() throws {
+    try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "Tablet-only wide toolbar")
+    let app = XCUIApplication(bundleIdentifier: "com.tolaria.mobile.dev")
+    app.launchArguments = ["--tolaria-mobile-search", "?source=fixture&editorMode=source&qaRun=tablet-format-toolbar"]
+    app.launch()
+    defer { app.terminate() }
+    let create = element(app, "note-list-create-action")
+    XCTAssertTrue(create.waitForExistence(timeout: 30))
+    create.tap()
+    let source = element(app, "editor-markdown-input")
+    XCTAssertTrue(source.waitForExistence(timeout: 15))
+    source.tap()
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 8))
+    source.typeText("Tablet raw draft")
+    XCTAssertTrue((source.value as? String ?? "").contains("Tablet raw draft"))
+    XCTAssertTrue(element(app, "editor-format-wikilink").waitForExistence(timeout: 15))
+    XCTAssertFalse(element(app, "editor-format-menu-insert").exists)
+    XCTAssertFalse(element(app, "editor-format-menu-more").exists)
+    attachScreen("tablet-wide-formatting-unchanged")
+  }
+
   private func verify(mode: String) throws {
     try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "Phone-specific compact toolbar")
     continueAfterFailure = false
@@ -19,7 +40,9 @@ final class MobileFormattingKeyboardTests: XCTestCase {
     let input = mode == "source" ? element(app, "editor-markdown-input") : app.webViews.textViews.firstMatch
     XCTAssertTrue(input.waitForExistence(timeout: 15))
     input.tap()
-    app.typeText("Phone formatting draft")
+    XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 8))
+    input.typeText("Phone formatting draft")
+    if mode == "source" { XCTAssertTrue((input.value as? String ?? "").contains("Phone formatting draft"), input.value as? String ?? "") }
     XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 8))
     assertDismissTarget(app)
     attachScreen("\(mode)-portrait-keyboard")
@@ -33,7 +56,7 @@ final class MobileFormattingKeyboardTests: XCTestCase {
     XCTAssertTrue(heading.waitForExistence(timeout: 5))
     heading.tap()
     XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 8))
-    app.typeText(" landscape")
+    input.typeText(" landscape")
     attachScreen("\(mode)-landscape-caret")
     element(app, "editor-hide-keyboard-action").tap()
     XCTAssertTrue(app.keyboards.firstMatch.waitForNonExistence(timeout: 8))
@@ -45,9 +68,29 @@ final class MobileFormattingKeyboardTests: XCTestCase {
     waitUntil { app.frame.height > app.frame.width }
     input.tap()
     XCTAssertTrue(app.keyboards.firstMatch.waitForExistence(timeout: 8))
-    app.typeText(" resumed")
+    input.typeText(" resumed")
     attachScreen("\(mode)-portrait-resumed-caret")
+    assertOverflowActions(app, mode: mode)
     assertSourceDraft(app, mode: mode)
+  }
+
+  private func assertOverflowActions(_ app: XCUIApplication, mode: String) {
+    element(app, "editor-format-menu-more").tap()
+    let strike = element(app, "editor-format-strike")
+    XCTAssertTrue(strike.waitForExistence(timeout: 5))
+    XCTAssertTrue(strike.isHittable)
+    strike.tap()
+    element(app, "editor-format-menu-insert").tap()
+    let wikilink = element(app, "editor-format-wikilink")
+    XCTAssertTrue(wikilink.waitForExistence(timeout: 5))
+    XCTAssertTrue(wikilink.isHittable)
+    wikilink.tap()
+    if mode == "source" {
+      XCTAssertTrue((element(app, "editor-markdown-input").value as? String ?? "").contains("[["))
+    } else {
+      XCTAssertTrue(element(app, "editor-wysiwyg-wikilink-picker").waitForExistence(timeout: 5))
+      element(app, "editor-wysiwyg-wikilink-backdrop").coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.1)).tap()
+    }
   }
 
   private func assertSourceDraft(_ app: XCUIApplication, mode: String) {
@@ -55,7 +98,7 @@ final class MobileFormattingKeyboardTests: XCTestCase {
     let source = element(app, "editor-markdown-input")
     XCTAssertTrue(source.waitForExistence(timeout: 8))
     let text = source.value as? String ?? ""
-    XCTAssertTrue(text.contains("Phone formatting draft"))
+    XCTAssertTrue(text.contains("Phone formatting draft"), text)
     XCTAssertTrue(text.contains("landscape"))
     XCTAssertTrue(text.contains("resumed"))
     XCTAssertTrue(text.contains("type: Note"))
@@ -63,6 +106,7 @@ final class MobileFormattingKeyboardTests: XCTestCase {
   }
 
   private func assertDismissTarget(_ app: XCUIApplication) {
+    assertPinnedActions(app)
     let button = element(app, "editor-hide-keyboard-action")
     XCTAssertTrue(button.waitForExistence(timeout: 5))
     XCTAssertTrue(button.isHittable)
@@ -73,6 +117,22 @@ final class MobileFormattingKeyboardTests: XCTestCase {
     let surfaces = [keyboard, app.buttons["assistantUndo"], app.otherElements["Typing Predictions"]]
     let top = surfaces.filter { $0.exists }.map { $0.frame.minY }.min() ?? keyboard.frame.minY
     waitUntil { button.frame.maxY <= top + 2 }
+  }
+
+  private func assertPinnedActions(_ app: XCUIApplication) {
+    let controls = ["editor-format-menu-insert", "editor-format-menu-more", "editor-hide-keyboard-action"]
+      .map { element(app, $0) }
+    for control in controls {
+      XCTAssertTrue(control.waitForExistence(timeout: 5))
+      XCTAssertTrue(control.isHittable)
+      XCTAssertGreaterThanOrEqual(control.frame.width, 43.99)
+      XCTAssertGreaterThanOrEqual(control.frame.height, 43.99)
+      XCTAssertTrue(app.frame.contains(control.frame))
+    }
+    for index in 1..<controls.count {
+      XCTAssertGreaterThanOrEqual(controls[index].frame.minX, controls[index - 1].frame.maxX - 0.5)
+      XCTAssertEqual(controls[index].frame.midY, controls[0].frame.midY, accuracy: 0.5)
+    }
   }
 
   private func element(_ app: XCUIApplication, _ id: String) -> XCUIElement {

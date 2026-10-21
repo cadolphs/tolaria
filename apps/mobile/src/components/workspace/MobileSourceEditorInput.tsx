@@ -48,6 +48,7 @@ export function SourceEditorInput(props: SourceEditorInputProps) {
       <AnimatedInput
         ref={inputRef}
         multiline
+        autoCorrect={false}
         scrollEnabled
         rejectResponderTermination={false}
         editable={editable}

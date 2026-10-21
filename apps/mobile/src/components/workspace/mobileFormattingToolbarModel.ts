@@ -1,10 +1,10 @@
 import type { MobileMarkdownFormatAction } from '../../workspace/mobileMarkdownFormatting'
 
 const groups = {
-  primary: ['bold', 'italic', 'link', 'wikilink'],
+  primary: ['bold', 'italic', 'link'],
   headings: ['heading1', 'heading2', 'heading3', 'heading4', 'heading5', 'heading6'],
   lists: ['bulletList', 'orderedList', 'taskList', 'indent', 'outdent'],
-  insert: ['attachment', 'table', 'codeBlock', 'mathBlock', 'mermaid', 'whiteboard', 'divider'],
+  insert: ['wikilink', 'attachment', 'table', 'codeBlock', 'mathBlock', 'mermaid', 'whiteboard', 'divider'],
   more: ['strike', 'code', 'highlight', 'quote', 'pastePlainText'],
   table: ['tableAddRowAfter', 'tableAddColumnAfter', 'tableDeleteRow', 'tableDeleteColumn'],
 } as const satisfies Record<string, readonly MobileMarkdownFormatAction[]>

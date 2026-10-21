@@ -2,9 +2,10 @@ import { expect, it } from 'vitest'
 import { nativeWysiwygFormattingActions } from './MobileWysiwygFormatCommands'
 import { formattingToolbarGroups, formattingToolbarSelection } from './mobileFormattingToolbarModel'
 
-it('keeps four primary actions and groups every other supported command exactly once', () => {
+it('keeps three primary actions and groups every other supported command exactly once', () => {
   const groups = formattingToolbarGroups(nativeWysiwygFormattingActions, true)
-  expect(groups.primary).toEqual(['bold', 'italic', 'link', 'wikilink'])
+  expect(groups.primary).toEqual(['bold', 'italic', 'link'])
+  expect(groups.insert).toContain('wikilink')
   const flattened = Object.values(groups).flat()
   expect(new Set(flattened).size).toBe(flattened.length)
   expect(new Set(flattened)).toEqual(new Set(nativeWysiwygFormattingActions))
