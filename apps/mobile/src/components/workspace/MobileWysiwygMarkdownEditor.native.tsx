@@ -2,27 +2,25 @@ import type { MobileMetrics } from '../../ui/mobileMetrics'
 import { useMobileStyles } from '../../ui/theme/useMobileTheme'
 import type { MobileColors } from '../../ui/theme/mobilePalette'
 import { RichText } from '@10play/tentap-editor'
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import { StyleSheet, View } from 'react-native'
 import { MobileKeyboardAvoidingView } from '../../ui/MobileKeyboardAvoidingView'
 import { probeProps } from '../../qa/mobileLayoutProbe'
 import { isMobileImageAttachment } from '../../workspace/mobileAttachments'
-import { mobileDocumentBody } from '../../workspace/mobileDocumentContent'
 import { useRegisteredMobileEditorCommands } from '../../workspace/mobileEditorCommands'
 import type { MobileNote, MobileTypeDefinitions } from '../../workspace/mobileWorkspaceModel'
 import { MobileWysiwygFormattingToolbar } from './MobileWysiwygFormattingToolbar.native'
 import { MobileWysiwygExternalLinkSheet } from './MobileWysiwygExternalLinkSheet'
-import { nativeWysiwygInitialExternalLinkValue } from './MobileWysiwygExternalLinkSheetModel'
 import { applyNativeWysiwygFormat, isNativeWysiwygMarkdownBlockAction, type NativeWysiwygCommandBridge, nativeWysiwygFormattingActions } from './MobileWysiwygFormatCommands'
 import { MobileWysiwygSlashMenu } from './MobileWysiwygSlashMenu.native'
 import { MobileWysiwygFind } from './MobileWysiwygFind.native'
 import { useMobileEditorFileSource } from './mobileEditorFileSource.native'
-import type { NativeWysiwygInlineAutocomplete, NativeWysiwygPlainTextPayload, NativeWysiwygWikilinkPayload } from './MobileWysiwygWikilinkBridgeModel'
+import type { NativeWysiwygPlainTextPayload, NativeWysiwygWikilinkPayload } from './MobileWysiwygWikilinkBridgeModel'
 import { MobileWysiwygWikilinkPicker } from './MobileWysiwygWikilinkPicker'
 import type { MobileWysiwygMarkdownEditorProps, NativeWysiwygPickerState, NativeWysiwygExternalLinkSheetState, NativeTentapEditorSurfaceProps, NativeTentapEditorSurfaceActionProps, NativeTentapEditorSurfaceActions } from './MobileNativeEditor.types'
-import { nativeWysiwygEditorState, nativeWysiwygEditorSelection, applyNativeWysiwygExternalLink, insertImportedAttachment, insertClipboardPlainText } from './mobileNativeEditorOperations'
-import { useNativeTentapEditorBridge, initialNativeEditorContent } from './useMobileNativeEditorRuntime'
+import { applyNativeWysiwygExternalLink, insertImportedAttachment, insertClipboardPlainText } from './mobileNativeEditorOperations'
 import { useNativeEditorRecovery, type NativeEditorRecoveryHandlers } from './useNativeEditorRecovery'
+import { useNativeEditorSurfaceSession } from './useNativeEditorSurfaceSession'
 
 type SessionProps = MobileWysiwygMarkdownEditorProps & NativeEditorRecoveryHandlers
 type SurfaceProps = NativeTentapEditorSurfaceProps & NativeEditorRecoveryHandlers
@@ -33,167 +31,78 @@ export function MobileWysiwygMarkdownEditor(props: MobileWysiwygMarkdownEditorPr
 }
 
 function NativeEditorSession(props: SessionProps) {
-  const {
-    blocks,
-    bullets,
-    layoutProbe,
-    note,
-    notes,
-    onImportAttachment,
-    onRegisterEditorCommands,
-    typeDefinitions,
-    vaultRootUri = null,
-  } = props
-  const [pickerState, setPickerState] = useState<NativeWysiwygPickerState | null>(null)
-  const [externalLinkState, setExternalLinkState] = useState<NativeWysiwygExternalLinkSheetState | null>(null)
-  const handleInlineAutocomplete = useCallback((match: NativeWysiwygInlineAutocomplete | null) => {
-    setPickerState((current) => inlineAutocompletePickerState(current, match))
-  }, [])
-  const handleOpenToolbarWikilinkPicker = useCallback(() => {
-    setPickerState({
-      kind: 'wikilink',
-      query: '',
-      source: 'toolbar',
-    })
-  }, [])
-  const handleCloseWikilinkPicker = useCallback(() => {
-    setPickerState(null)
-  }, [])
-  const bridge = useNativeTentapEditorBridge({
-    ...props,
-    initialDocumentContent: initialNativeEditorContent(props),
-    onInlineAutocomplete: handleInlineAutocomplete,
-  })
-  const handleOpenExternalLinkSheet = useCallback(() => {
-    setExternalLinkState({
-      initialUrl: nativeWysiwygInitialExternalLinkValue(nativeWysiwygEditorState(bridge.editor)),
-      selection: nativeWysiwygEditorSelection(bridge.editor),
-    })
-  }, [bridge.editor])
-  const handleCloseExternalLinkSheet = useCallback(() => {
-    setExternalLinkState(null)
-  }, [])
-
-  return (
-    <NativeTentapEditorSurface
-      {...bridge}
-      onProcessLoss={reason => { bridge.retireEditor(); props.onProcessLoss(reason) }}
-      vaultRootUri={vaultRootUri}
-      previewMarkdown={mobileDocumentBody(initialNativeEditorContent({ blocks, bullets, note }))}
-      layoutProbe={layoutProbe}
-      notes={notes}
-      onImportAttachment={onImportAttachment}
-      onRegisterEditorCommands={onRegisterEditorCommands}
-      pickerState={pickerState}
-      sourceNote={note}
-      typeDefinitions={typeDefinitions}
-      externalLinkState={externalLinkState}
-      onCloseExternalLinkSheet={handleCloseExternalLinkSheet}
-      onCloseWikilinkPicker={handleCloseWikilinkPicker}
-      onOpenExternalLinkSheet={handleOpenExternalLinkSheet}
-      onOpenToolbarWikilinkPicker={handleOpenToolbarWikilinkPicker}
-    />
-  )
+  const session = useNativeEditorSurfaceSession(props)
+  return <NativeTentapEditorSurface {...session} />
 }
 
 function NativeTentapEditorSurface(props: SurfaceProps) {
   const { nativeEditorStyles } = useMobileStyles(createThemeStyles)
   const fileSource = useMobileEditorFileSource(props.vaultRootUri, props.previewMarkdown)
-  const {
-    activateEditorChanges,
-    editor,
-    externalLinkState,
-    flushEditorDocument,
-    injectEditorCss,
-    insertAttachment,
-    insertMarkdownBlock,
-    insertPlainText,
-    insertWikilink,
-    layoutProbe,
-    notes,
-    onCloseExternalLinkSheet,
-    onCloseWikilinkPicker,
-    onImportAttachment,
-    onOpenExternalLinkSheet,
-    onOpenToolbarWikilinkPicker,
-    onRegisterEditorCommands,
-    pickerState,
-    sourceNote,
-    typeDefinitions,
-  } = props
-  const actions = useNativeTentapEditorSurfaceActions({
-    editor,
-    externalLinkState,
-    flushEditorDocument,
-    insertAttachment,
-    insertMarkdownBlock,
-    insertPlainText,
-    insertWikilink,
-    onCloseExternalLinkSheet,
-    onCloseWikilinkPicker,
-    onImportAttachment: async () => {
-      const attachment = await onImportAttachment?.()
-      if (attachment && isMobileImageAttachment(attachment)) await fileSource.prepareAttachment?.(attachment.path)
-      return attachment ?? null
-    },
-    onOpenExternalLinkSheet,
-    onOpenToolbarWikilinkPicker,
-    pickerState,
-  })
-  useRegisteredMobileEditorCommands(onRegisterEditorCommands, {
-    blur: () => editor.blur(),
-    pastePlainText: actions.handlePastePlainText,
-    save: flushEditorDocument,
-  })
-
+  const actions = useRegisteredNativeSurfaceActions(props, fileSource)
   return (
     <MobileKeyboardAvoidingView
-      {...probeProps(layoutProbe, 'editor.wysiwyg.form')}
+      {...probeProps(props.layoutProbe, 'editor.wysiwyg.form')}
       style={nativeEditorStyles.container}
       testID="editor-wysiwyg-form"
-      onTouchStart={activateEditorChanges}
+      onTouchStart={props.activateEditorChanges}
     >
-      <MobileWysiwygFind editor={editor} register={onRegisterEditorCommands} onBeforeReplace={activateEditorChanges} />
+      <MobileWysiwygFind editor={props.editor} register={props.onRegisterEditorCommands} onBeforeReplace={props.activateEditorChanges} />
       {fileSource.ready && (
         <RichText
-          editor={editor}
+          editor={props.editor}
           {...fileSource.webViewProps}
-          {...probeProps(layoutProbe, 'editor.wysiwyg.richText')}
+          {...probeProps(props.layoutProbe, 'editor.wysiwyg.richText')}
           style={nativeEditorStyles.richText}
           testID="editor-wysiwyg-input"
-          onLoadEnd={injectEditorCss}
+          onLoadEnd={props.injectEditorCss}
           onContentProcessDidTerminate={() => props.onProcessLoss('contentProcessTerminated')}
           onRenderProcessGone={() => props.onProcessLoss('renderProcessGone')}
         />
       )}
-      <MobileWysiwygSlashMenu editor={editor} />
-      <View
-        {...probeProps(layoutProbe, 'editor.wysiwyg.toolbarHost')}
-        style={nativeEditorStyles.toolbarHost}
-      >
-        <MobileWysiwygFormattingToolbar
-          editor={editor}
-          actions={nativeWysiwygFormattingActions}
-          layoutProbe={layoutProbe}
-          metricId="editor.wysiwyg.toolbar"
-          onFormat={actions.handleFormat}
-        />
-      </View>
+      <MobileWysiwygSlashMenu editor={props.editor} />
+      <NativeEditorToolbar editor={props.editor} layoutProbe={props.layoutProbe} onFormat={actions.handleFormat} />
       <NativeWysiwygPickerOverlay
         actions={actions}
-        notes={notes}
-        pickerState={pickerState}
-        sourceNote={sourceNote}
-        typeDefinitions={typeDefinitions}
-        onClose={onCloseWikilinkPicker}
+        notes={props.notes}
+        pickerState={props.pickerState}
+        sourceNote={props.sourceNote}
+        typeDefinitions={props.typeDefinitions}
+        onClose={props.onCloseWikilinkPicker}
       />
       <NativeWysiwygExternalLinkOverlay
         actions={actions}
-        externalLinkState={externalLinkState}
-        onClose={onCloseExternalLinkSheet}
+        externalLinkState={props.externalLinkState}
+        onClose={props.onCloseExternalLinkSheet}
       />
     </MobileKeyboardAvoidingView>
   )
+}
+
+type ToolbarProps = Pick<SurfaceProps, 'editor' | 'layoutProbe'> & { onFormat: NativeTentapEditorSurfaceActions['handleFormat'] }
+function NativeEditorToolbar(props: ToolbarProps) {
+  const { nativeEditorStyles } = useMobileStyles(createThemeStyles)
+  return (
+    <View {...probeProps(props.layoutProbe, 'editor.wysiwyg.toolbarHost')} style={nativeEditorStyles.toolbarHost}>
+      <MobileWysiwygFormattingToolbar editor={props.editor} actions={nativeWysiwygFormattingActions}
+        layoutProbe={props.layoutProbe} metricId="editor.wysiwyg.toolbar" onFormat={props.onFormat} />
+    </View>
+  )
+}
+
+function useRegisteredNativeSurfaceActions(props: SurfaceProps, fileSource: ReturnType<typeof useMobileEditorFileSource>) {
+  const actionProps: NativeTentapEditorSurfaceActionProps = {
+    ...props,
+    onImportAttachment: async () => {
+      const attachment = await props.onImportAttachment?.()
+      if (attachment && isMobileImageAttachment(attachment)) await fileSource.prepareAttachment?.(attachment.path)
+      return attachment ?? null
+    },
+  }
+  const actions = useNativeTentapEditorSurfaceActions(actionProps)
+  useRegisteredMobileEditorCommands(props.onRegisterEditorCommands, {
+    blur: () => props.editor.blur(), pastePlainText: actions.handlePastePlainText, save: props.flushEditorDocument,
+  })
+  return actions
 }
 
 function useNativeTentapEditorSurfaceActions(props: NativeTentapEditorSurfaceActionProps): NativeTentapEditorSurfaceActions {
@@ -344,21 +253,6 @@ function useNativeWysiwygToolbarHandler({
       onOpenToolbarWikilinkPicker,
     ],
   )
-}
-
-function inlineAutocompletePickerState(
-  current: NativeWysiwygPickerState | null,
-  match: NativeWysiwygInlineAutocomplete | null,
-): NativeWysiwygPickerState | null {
-  if (current?.source === 'toolbar') return current
-  if (!match) return current?.source === 'inline' ? null : current
-
-  return {
-    kind: match.kind,
-    query: match.query,
-    replacementRange: match.range,
-    source: 'inline',
-  }
 }
 
 function wikilinkPickerKey(state: NativeWysiwygPickerState): string {

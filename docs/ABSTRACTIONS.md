@@ -834,6 +834,8 @@ replacement until foreground activity and the existing working-copy barrier allo
 it, rejects stale session callbacks, and does nothing on healthy foreground
 transitions. Opt-in recovery analytics contain only a fixed reason enum; local
 queue timing logs contain no note content, filenames or vault identifiers.
+`useNativeEditorSurfaceSession` keeps picker/link state and bridge event bindings
+outside JSX rendering; the surface retains its existing commands and overlays.
 
 `mobileWorkspaceEditing` retains edit dispatch and the public write-result API.
 Its type contracts live in `mobileWorkspaceEditing.types`; note creation,
