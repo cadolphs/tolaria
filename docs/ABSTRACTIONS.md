@@ -898,6 +898,10 @@ security-scoped bookmarks through `TolariaWorkspaceAccess`; Expo Go access remai
 session-scoped. Explicit QA sources and deterministic probes take precedence over
 remembered user data. The Laputa development bridge is read-only and rejects writes.
 
+Prepared multi-note actions validate every
+target's current identity/path before publishing any hydration, so a moved or
+deleted later target cannot leave partial hydration from an abandoned action.
+
 `folderOpenFailure.ts` keeps cancellation separate from folder-open failures.
 Known native cancellation codes (or the legacy exact cancellation message) stay
 quiet; provider/picker, selected-folder import, catalog and preparation failures

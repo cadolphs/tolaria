@@ -48,18 +48,24 @@ async function prepare(notes: MobileNote[], services: PreparedEditServices, comm
     contents.push({ note, rawContent })
   }
   // Do not publish a partial action when any required file is unavailable.
+  for (const { note } of contents) requirePreparedNote(services.snapshot(), note)
   for (const content of contents) hydratePreparedNote(content, services)
   return commit()
 }
 
 function hydratePreparedNote({ note, rawContent }: PreparedNote, services: PreparedEditServices) {
-  const current = currentNote(services.snapshot(), note.id)
-  if (!current || current.path !== note.path) throw new Error('mobileNoteReadFailed')
+  const current = requirePreparedNote(services.snapshot(), note)
   if (!mobileNoteNeedsRead(current, services.source)) return
   services.apply({
     type: mobileNoteActionMode(current) === 'text-file' ? 'hydrateTextFileContent' : 'hydrateNoteContent',
     noteId: note.id, rawContent,
   })
+}
+
+function requirePreparedNote(snapshot: MobileWorkspaceSnapshot, note: MobileNote) {
+  const current = currentNote(snapshot, note.id)
+  if (!current || current.path !== note.path) throw new Error('mobileNoteReadFailed')
+  return current
 }
 
 function currentNote(snapshot: MobileWorkspaceSnapshot, id: string) {
