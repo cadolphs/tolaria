@@ -8,8 +8,9 @@ function pendingBulkAction() {
   const base = workspaceScenarioForId('default')
   const notes = [0, 1].map(index => ({ ...base.notes[0], id: `note-${index}`, path: `note-${index}.md`, rawContent: undefined }))
   let snapshot: MobileWorkspaceSnapshot = { ...base, notes, allNotes: notes }
-  const gate = Promise.withResolvers<string>()
-  const read = vi.fn().mockResolvedValueOnce('# First fresh source\n').mockImplementationOnce(() => gate.promise)
+  let finishRead: (content: string) => void = () => undefined
+  const pendingRead = new Promise<string>(resolve => { finishRead = resolve })
+  const read = vi.fn().mockResolvedValueOnce('# First fresh source\n').mockImplementationOnce(() => pendingRead)
   const apply = vi.fn((edit: MobileWorkspaceEdit) => {
     const result = applyMobileWorkspaceEditWithWrites(snapshot, edit)
     snapshot = result.snapshot
@@ -17,7 +18,7 @@ function pendingBulkAction() {
   })
   const prepared = createMobilePreparedEdits({ apply, read, snapshot: () => snapshot, isCurrent: () => true, source: 'native' })
   const action = prepared.apply({ type: 'bulkEdit', edits: notes.map(note => ({ type: 'setArchived', noteId: note.id, archived: true })) })
-  return { action, apply, gate, snapshot: () => snapshot, replace: (next: MobileWorkspaceSnapshot) => { snapshot = next } }
+  return { action, apply, gate: { resolve: finishRead }, snapshot: () => snapshot, replace: (next: MobileWorkspaceSnapshot) => { snapshot = next } }
 }
 
 it.each(['moved', 'deleted'])('rejects a %s later target before publishing any partial hydration', async change => {
