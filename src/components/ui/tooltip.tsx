@@ -30,6 +30,26 @@ function TooltipTrigger({
 	return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
 }
 
+function getRootZoom(): number {
+	const style = getComputedStyle(document.documentElement);
+	const overlayZoom = parseZoomValue(
+		style.getPropertyValue("--tolaria-overlay-zoom-factor").trim(),
+	);
+	if (overlayZoom !== null) return overlayZoom;
+	return (
+		parseZoomValue(style.getPropertyValue("zoom")) ??
+		parseZoomValue(document.documentElement.style.getPropertyValue("zoom")) ??
+		1
+	);
+}
+
+function parseZoomValue(source: string | undefined): number | null {
+	if (!source || source === "normal") return null;
+	const parsed = Number.parseFloat(source);
+	const value = source.endsWith("%") ? parsed / 100 : parsed;
+	return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 const TooltipContent = React.forwardRef<
 	React.ElementRef<typeof TooltipPrimitive.Content>,
 	React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
@@ -44,10 +64,35 @@ const TooltipContent = React.forwardRef<
 	},
 	forwardedRef,
 ) {
+	const contentRef = React.useRef<HTMLDivElement>(null);
+
+	React.useLayoutEffect(() => {
+		const content = contentRef.current;
+		if (!content) return;
+
+		const zoom = getRootZoom();
+		if (zoom === 1) return;
+
+		// Radix positions the tooltip in zoomed coordinate space (because documentElement
+		// has zoom applied). Adjust the position to logical viewport coordinates.
+		const currentLeft = Number.parseFloat(content.style.left || "0");
+		const currentTop = Number.parseFloat(content.style.top || "0");
+
+		content.style.left = `${currentLeft / zoom}px`;
+		content.style.top = `${currentTop / zoom}px`;
+	});
+
 	return (
 		<TooltipPrimitive.Portal>
 			<TooltipPrimitive.Content
-				ref={forwardedRef}
+				ref={(node) => {
+					contentRef.current = node;
+					if (typeof forwardedRef === "function") {
+						forwardedRef(node);
+					} else if (forwardedRef) {
+						forwardedRef.current = node;
+					}
+				}}
 				data-slot="tooltip-content"
 				sideOffset={sideOffset}
 				collisionPadding={collisionPadding}
