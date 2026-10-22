@@ -902,6 +902,24 @@ Prepared multi-note actions validate every
 target's current identity/path before publishing any hydration, so a moved or
 deleted later target cannot leave partial hydration from an abandoned action.
 
+`workspaceSnapshotFrame.beginBackgroundReload` owns a single-use, cancellable
+read-only-scan reconciliation ticket (ADR 0277). Its baseline is an authoritative
+snapshot, not a source-free startup preview. `workspaceReloadReconciliation`
+merges scan results with the frame's latest immutable state; source changes,
+hydration, creations, moves and deletions made during the scan take precedence.
+It retains selected-note identity, search, undo history and current failures,
+while accepting external changes to untouched notes. Type/view/folder changes
+use the same three-way baseline rules. The merge performs no repository writes.
+
+Collection indexing, source comparisons and merge batches share the existing
+input-task budget. Input arriving during a yield invalidates the candidate and
+causes a retry against the latest frame; cancellation or a newer ticket prevents
+publication. Duplicate identities/case aliases, cross-vault results and ambiguous
+creation collisions fail before any state is published. This boundary does not
+replace checkout/save/recovery barriers or grant cached metadata edit authority.
+Startup admission and its fresh type/template inputs must be connected separately
+before using it to enable editing during startup.
+
 `folderOpenFailure.ts` keeps cancellation separate from folder-open failures.
 Known native cancellation codes (or the legacy exact cancellation message) stay
 quiet; provider/picker, selected-folder import, catalog and preparation failures

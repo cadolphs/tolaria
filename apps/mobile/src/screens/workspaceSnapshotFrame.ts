@@ -1,5 +1,6 @@
 import type { MobileWorkspaceSnapshot } from '../workspace/mobileWorkspaceModel'
 import { emptyMobileWorkspaceHistory, type MobileWorkspaceHistoryState } from './tabletWorkspaceHistory'
+import { createWorkspaceReloadCompletion } from '../workspace/workspaceReloadReconciliation'
 
 type Update<Value> = Value | ((previous: Value) => Value)
 
@@ -8,6 +9,7 @@ export function createWorkspaceSnapshotFrame(snapshot: MobileWorkspaceSnapshot, 
   let state = { workspaceSnapshot: snapshot, workspaceHistory: emptyMobileWorkspaceHistory }
   const listeners = new Set<() => void>()
   const workspaceSnapshotRef = { current: snapshot }
+  let reloading: AbortController | undefined
   const emit = () => { for (const listener of listeners) listener() }
   const setWorkspaceSnapshot = (update: Update<MobileWorkspaceSnapshot>) => {
     const next = updatedValue(state.workspaceSnapshot, update)
@@ -23,6 +25,12 @@ export function createWorkspaceSnapshotFrame(snapshot: MobileWorkspaceSnapshot, 
     emit()
   }
   return {
+    beginBackgroundReload: () => {
+      reloading?.abort()
+      reloading = new AbortController()
+      return createWorkspaceReloadCompletion({ baseline: state.workspaceSnapshot,
+        current: () => state.workspaceSnapshot, publish: setWorkspaceSnapshot, controller: reloading })
+    },
     generation,
     workspaceSnapshotRef,
     replaceWorkspaceSnapshot: setWorkspaceSnapshot,
