@@ -4,10 +4,12 @@ import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import git from 'isomorphic-git'
-import { afterEach, expect, it } from 'vitest'
-import { cloneGitVault, syncGitVault } from './gitRemote'
+import { afterEach, expect, it, vi } from 'vitest'
+import { cloneGitVault, syncGitVault, type GitRemoteOptions } from './gitRemote'
 import { createGitVault } from './gitVault'
 import { gitTestEnvironment, startGitTestServer } from './gitTestServer'
+import { createGitEditorAccess } from './gitEditorAccess'
+import { createWorkspaceSyncEditors } from '../workspaceSyncEditors'
 
 const author = { name: 'Tablet QA', email: 'qa@example.invalid' }
 const cleanup: (() => Promise<void>)[] = []
@@ -165,4 +167,38 @@ it('carries cancellation to the HTTP adapter and stops before the next phase', a
   expect(await git.log(second)).toHaveLength(1)
   expect(await syncGitVault(second, author)).toMatchObject({ kind: 'synced' })
   expect(await readFile(join(second.dir, 'desktop.md'), 'utf8')).toBe('# Desktop\n')
+})
+
+it.each(['initial', 'after-fetch'])('refreshes editors after successful %s checkpoint recovery even when heads then match', async boundary => {
+  const { first, second } = await fixture()
+  const before = await git.resolveRef({ ...second, ref: 'HEAD' })
+  const content = '# Recovered remote note\n'
+  await writeFile(join(first.dir, 'note.md'), content)
+  await syncGitVault(first, author)
+  const target = await git.resolveRef({ ...first, ref: 'HEAD' })
+  await git.fetch({ ...second, ref: 'main', singleBranch: true, tags: false })
+  const journal = JSON.stringify({ version: 1, branch: 'main', before, target })
+  const journalPath = join(second.dir, '.git', 'tolaria-checkout.json')
+  if (boundary === 'initial') await writeFile(journalPath, journal)
+  const editors = createWorkspaceSyncEditors()
+  editors.register(async () => () => {}, 'note.md')
+  const refresh = vi.fn()
+  const access = createGitEditorAccess({ editors, refresh })
+  let phase = ''
+  const options: GitRemoteOptions = {
+    ...second,
+    withLocalAccess: async operation => {
+      if (boundary === 'after-fetch' && phase === 'checkout') await writeFile(journalPath, journal)
+      return access(operation)
+    },
+    onPhase: value => { phase = value },
+  }
+  expect(await syncGitVault(options, author)).toMatchObject({ kind: 'synced', workspaceChanged: true })
+  expect(refresh).toHaveBeenCalledExactlyOnceWith('note.md')
+  expect(await readFile(join(second.dir, 'note.md'), 'utf8')).toBe(content)
+  expect(await git.resolveRef({ ...second, ref: 'HEAD' })).toBe(target)
+  await expect(readFile(journalPath)).rejects.toMatchObject({ code: 'ENOENT' })
+  expect(await syncGitVault({ ...second, withLocalAccess: access }, author))
+    .toMatchObject({ kind: 'synced', workspaceChanged: false })
+  expect(refresh).toHaveBeenCalledOnce()
 })

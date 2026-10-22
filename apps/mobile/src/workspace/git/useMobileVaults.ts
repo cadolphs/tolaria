@@ -210,7 +210,7 @@ export function useMobileVaults() {
     setLastCommitId(result.oid.slice(0, 8))
     setStatus('committed')
     committed = true
-    return 'unchanged'
+    return result.workspaceChanged ? null : 'unchanged'
   }, true, 'commit')
     if (committed && push) await perform(() => syncTask(false), true, 'sync')
   }

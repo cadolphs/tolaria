@@ -24,26 +24,28 @@ export function createGitVault(options: GitVaultContext) {
 }
 
 async function refreshedChanges(context: GitVaultContext) {
-  await recoverGitCheckout(context)
+  const workspaceChanged = await recoverGitCheckout(context)
   const clean = await stageVerifiedGitChanges(context)
-  return clean ? [] : readGitWorkingTreeChanges(context)
+  const changed = clean ? [] : await readGitWorkingTreeChanges(context)
+  return { changed, workspaceChanged }
 }
 
 async function requireClean(context: GitVaultContext) {
-  if ((await refreshedChanges(context)).length) throw new Error('uncommittedChanges')
-  return { changedFiles: 0, oid: await git.resolveRef({ ...context, ref: 'HEAD' }) }
+  const { changed, workspaceChanged } = await refreshedChanges(context)
+  if (changed.length) throw new Error('uncommittedChanges')
+  return { changedFiles: 0, oid: await git.resolveRef({ ...context, ref: 'HEAD' }), workspaceChanged }
 }
 
 async function checkpoint(context: GitVaultContext, author: GitAuthor, message = 'Update vault from Tolaria mobile') {
   if (!message.trim()) throw new Error('emptyCommitMessage')
-  const changed = await refreshedChanges(context)
+  const { changed, workspaceChanged } = await refreshedChanges(context)
   for (const { filepath, deleted } of changed) {
     if (deleted) await git.remove({ ...context, filepath })
   }
   const oid = changed.length
     ? await git.commit({ ...context, author, message: message.trim() })
     : await git.resolveRef({ ...context, ref: 'HEAD' })
-  return { changedFiles: changed.length, oid }
+  return { changedFiles: changed.length, oid, workspaceChanged }
 }
 
 async function relationship(context: GitVaultContext, remoteOid: string): Promise<GitRelationship> {

@@ -48,6 +48,7 @@ export function createWorkspaceSyncEditors() {
 }
 
 export const WorkspaceSyncEditorsContext = createContext<ReturnType<typeof createWorkspaceSyncEditors> | null>(null)
+export const WorkspaceSnapshotRevisionContext = createContext(0)
 
 export function useWorkspaceSyncEditor(prepare: PrepareEditorForSync, noteId?: string) {
   const registry = useContext(WorkspaceSyncEditorsContext)

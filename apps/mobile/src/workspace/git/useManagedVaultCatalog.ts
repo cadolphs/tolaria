@@ -57,13 +57,20 @@ function restoreCatalogState(update: UpdateCatalog) {
     stage = 'selection'
     const restored = await restoreCatalogSelection(catalog)
     if (!active) return
-    const preview = await readNativeWorkspaceStartupPreview(restored.selection, cancellation.signal).catch(() => null)
-    if (!active) return
-    update(previous => ({ ...previous, preview }))
+    // Queue preview authorization first, without making fresh preparation wait on cache IO.
+    void readNativeWorkspaceStartupPreview(restored.selection, cancellation.signal).catch(() => null).then(preview => {
+      if (active && !cancellation.signal.aborted) update(previous => ({ ...previous, preview }))
+    })
     const selection = await prepareNativeWorkspace(restored.selection, cancellation.signal)
-    if (active) update(previous => ({ ...previous,
-      restored: { ...restored, selection: selectedAfterPreparation(selection, previous.preview) }, preview: null }))
-  }).then(() => finishCatalogRestoration(active, update), () => finishCatalogRestoration(active, update, stage))
+    if (active) {
+      cancellation.abort()
+      update(previous => ({ ...previous,
+        restored: { ...restored, selection: selectedAfterPreparation(selection, previous.preview) }, preview: null }))
+    }
+  }).then(() => finishCatalogRestoration(active, update), () => {
+    cancellation.abort()
+    finishCatalogRestoration(active, update, stage)
+  })
   return () => { active = false; cancellation.abort() }
 }
 

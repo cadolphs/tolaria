@@ -3,6 +3,7 @@ import { absoluteDate, relativeDate } from './localVaultPresentation'
 import type { SnapshotCacheStorage } from './workspaceSnapshotCache'
 import { readWorkspaceSnapshotEnvelope, type WorkspaceSnapshotIdentity } from './workspaceSnapshotEnvelope'
 import { workspaceSnapshotStorage } from './workspaceSnapshotStorage'
+import { mapWorkspaceItems } from './cooperativeWorkspaceItems'
 
 type PreviewNote = Omit<MobileNote, 'rawContent' | 'editorBlocks' | 'editorBullets'>
 type PreviewType = Omit<MobileTypeDefinition, 'rawContent' | 'template'>
@@ -18,9 +19,9 @@ export async function readWorkspaceSnapshotPreview(identity: WorkspaceSnapshotId
   try {
     const key = await storage.digest(identity.vaultPath)
     requireActivePreview(signal)
-    const record = await readWorkspaceSnapshotEnvelope(storage, key, identity)
+    const record = await readWorkspaceSnapshotEnvelope(storage, key, identity, signal)
     requireActivePreview(signal)
-    return record ? previewMetadata(record.snapshot) : null
+    return record ? await previewMetadata(record.snapshot, signal) : null
   } catch { return null }
 }
 
@@ -28,10 +29,12 @@ function requireActivePreview(signal?: AbortSignal) {
   if (signal?.aborted) throw new Error('workspaceLoadCancelled')
 }
 
-function previewMetadata(snapshot: MobileWorkspaceSnapshot): WorkspaceSnapshotPreview {
+async function previewMetadata(snapshot: MobileWorkspaceSnapshot, signal?: AbortSignal): Promise<WorkspaceSnapshotPreview> {
+  const notes = await mapWorkspaceItems(snapshot.notes, previewNote, signal)
+  const allNotes = await mapWorkspaceItems(snapshot.allNotes ?? [], previewNote, signal)
   return {
     kind: 'provisional', source: snapshot.source,
-    notes: snapshot.notes.map(previewNote), allNotes: (snapshot.allNotes ?? []).map(previewNote),
+    notes, allNotes,
     sidebarSections: snapshot.sidebarSections, folderPaths: snapshot.folderPaths,
     noteListSubtitle: snapshot.noteListSubtitle, noteListPropertyOverrides: snapshot.noteListPropertyOverrides,
     selectedNoteId: snapshot.selectedNoteId, searchQuery: snapshot.searchQuery, views: snapshot.views,

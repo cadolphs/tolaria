@@ -2,6 +2,7 @@ import type { LocalVaultSnapshotOptions } from './localVaultSnapshot'
 import type { MobileNote, MobileWorkspaceSnapshot } from './mobileWorkspaceModel'
 import { absoluteDate, relativeDate } from './localVaultPresentation'
 import { serializeMobileVaultConfig } from './mobileVaultConfig'
+import { mapWorkspaceItems } from './cooperativeWorkspaceItems'
 import { readWorkspaceSnapshotEnvelope, writeWorkspaceSnapshotEnvelope, workspaceSnapshotCacheVersion,
   type WorkspaceSnapshotEnvelopeContext } from './workspaceSnapshotEnvelope'
 
@@ -15,14 +16,14 @@ export type SnapshotCacheStorage = {
 type CacheSession = { snapshot: MobileWorkspaceSnapshot | null; save: (snapshot: MobileWorkspaceSnapshot) => Promise<void> }
 const uncached: CacheSession = { snapshot: null, save: async () => {} }
 
-export async function openWorkspaceSnapshotCache(options: LocalVaultSnapshotOptions, storage: SnapshotCacheStorage | null) {
+export async function openWorkspaceSnapshotCache(options: LocalVaultSnapshotOptions, storage: SnapshotCacheStorage | null, signal?: AbortSignal) {
   if (!storage || options.files.length < 128 || !options.files.every(file => /^[a-f0-9]{64}$/u.test(file.contentDigest ?? ''))) return uncached
   let key: string, input: string
   try {
     key = await storage.digest(options.vaultPath)
     input = await storage.digest(snapshotInput(options, storage.revision))
   } catch { return uncached }
-  const snapshot = await readCachedSnapshot(storage, key, input, options).catch(() => null)
+  const snapshot = await readCachedSnapshot(storage, { key, input }, options, signal).catch(() => null)
   return { snapshot, save: (next: MobileWorkspaceSnapshot) => saveCachedSnapshot(storage, { key, input, identity: options }, next) }
 }
 
@@ -33,12 +34,15 @@ function snapshotInput(options: LocalVaultSnapshotOptions, revision?: string) {
     options.maxNotes, serializeMobileVaultConfig(options.vaultConfig ?? {}), options.folderPaths ?? [], files])
 }
 
-async function readCachedSnapshot(storage: SnapshotCacheStorage, key: string, input: string, options: LocalVaultSnapshotOptions) {
-  const record = await readWorkspaceSnapshotEnvelope(storage, key, options)
-  if (!record || record.input !== input) return null
+async function readCachedSnapshot(storage: SnapshotCacheStorage, target: Pick<WorkspaceSnapshotEnvelopeContext, 'key' | 'input'>,
+  options: LocalVaultSnapshotOptions, signal?: AbortSignal) {
+  const record = await readWorkspaceSnapshotEnvelope(storage, target.key, options, signal)
+  if (!record || record.input !== target.input) return null
   const { snapshot } = record
   if (!validSnapshot(snapshot, options)) return null
-  return { ...snapshot, notes: snapshot.notes.map(refreshDates), allNotes: snapshot.allNotes?.map(refreshDates) }
+  const notes = await mapWorkspaceItems(snapshot.notes, refreshDates, signal)
+  const allNotes = snapshot.allNotes ? await mapWorkspaceItems(snapshot.allNotes, refreshDates, signal) : undefined
+  return { ...snapshot, notes, allNotes }
 }
 
 function validSnapshot(snapshot: MobileWorkspaceSnapshot, options: LocalVaultSnapshotOptions) {

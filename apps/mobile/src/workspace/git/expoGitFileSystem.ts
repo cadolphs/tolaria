@@ -41,13 +41,13 @@ export function createExpoGitFileSystem(
   })
   return {
     promises: {
-      readFile: async (path: GitPath, options?: string | { encoding?: string }) => {
+      readFile: (path: GitPath, options?: string | { encoding?: string }) => readNative(async () => {
         requireEntry(readInfo, uri(path), false)
-        const nativeBytes = await readNative(() => file(path).bytes())
+        const nativeBytes = await file(path).bytes()
         const bytes = Buffer.from(nativeBytes.buffer, nativeBytes.byteOffset, nativeBytes.byteLength)
         return options === 'utf8' || (typeof options === 'object' && options.encoding === 'utf8')
           ? bytes.toString('utf8') : bytes
-      },
+      }),
       writeFile: (path: GitPath, content: string | Uint8Array) => run(() => {
         requireParent(readInfo, uri(path))
         // Expo needs a plain Uint8Array. Share its bounded buffer instead of copying a whole Git pack.
@@ -58,20 +58,20 @@ export function createExpoGitFileSystem(
         requireEntry(readInfo, uri(path), false)
         file(path).delete()
       }),
-      readdir: async (path: GitPath) => {
+      readdir: (path: GitPath) => readNative(() => {
         requireEntry(readInfo, uri(path), true)
-        return readNative(() => readDirectory(uri(path)))
-      },
+        return readDirectory(uri(path))
+      }),
       mkdir: (path: GitPath) => run(() => {
         if (readInfo(uri(path)).exists) throw gitFsError('EEXIST')
         requireParent(readInfo, uri(path))
         directory(path).create()
       }),
-      rmdir: async (path: GitPath) => {
+      rmdir: (path: GitPath) => run(async () => {
         requireEntry(readInfo, uri(path), true)
         if ((await readNative(() => readDirectory(uri(path)))).length) throw gitFsError('ENOTEMPTY')
-        directory(path).delete()
-      },
+        await run(() => directory(path).delete())
+      }),
       stat,
       lstat: stat,
       readlink: async () => { throw gitFsError('ENOTSUP') },

@@ -7,7 +7,8 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { WorkspaceSnapshotRevisionContext } from '../workspace/workspaceSyncEditors'
 import { MobileEditorBlocks } from '../components/workspace/MobileEditorBlocks'
 import { MobileFilePreview } from '../components/workspace/MobileFilePreview'
 import { MobileMarkdownSourceEditor } from '../components/workspace/MobileMarkdownSourceEditor'
@@ -386,11 +387,12 @@ function EditorContent({
   wysiwygWikilinkInsertProbe = false,
   wysiwygMutationProbe = false,
 }: EditorContentProps) {
+  const revision = useContext(WorkspaceSnapshotRevisionContext)
   if (editing) {
     if (plainText || editingMode === 'source') {
       return (
         <MobileMarkdownSourceEditor
-          key={`${note.id}:${plainText ? 'text' : 'source'}`}
+          key={`${revision}:${note.id}:${plainText ? 'text' : 'source'}`}
           blocks={blocks}
           bullets={bullets}
           compact={compact}
@@ -408,7 +410,7 @@ function EditorContent({
 
     return (
       <MobileWysiwygMarkdownEditor
-        key={`${note.id}:wysiwyg`}
+        key={`${revision}:${note.id}:wysiwyg`}
         blocks={blocks}
         bullets={bullets}
         compact={compact}

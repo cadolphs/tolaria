@@ -50,14 +50,15 @@ async function syncUnlocked(options: GitRemoteOptions, author: GitAuthor) {
   const ref = await git.currentBranch(context)
   if (!ref) throw new Error('detachedHead')
   emitPhase(options, 'checkpoint')
-  const checkpoint = await localAccess(options, async () => ({
-    value: await checkpointLocal(options, context, author), workspaceChanged: false,
-  }))
+  const checkpoint = await localAccess(options, async () => {
+    const value = await checkpointLocal(options, context, author)
+    return { value, workspaceChanged: value.workspaceChanged }
+  })
   requireActiveSync(options.signal)
   const token = options.getToken ? await options.getToken() : options.token
   const connection = transport({ ...options, token, cache: context.cache }, url)
   const result = await syncHeads(options, { ...connection, url, ref }, author)
-  return { ...result, changedFiles: checkpoint.changedFiles }
+  return { ...result, workspaceChanged: checkpoint.workspaceChanged || result.workspaceChanged, changedFiles: checkpoint.changedFiles }
 }
 
 type GitConnection = ReturnType<typeof transport> & { url: string; ref: string }
@@ -66,9 +67,9 @@ async function syncHeads(options: GitRemoteOptions, connection: GitConnection, a
   let workspaceChanged = false
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const integrated = await fetchAndIntegrate(options, connection, author)
-    workspaceChanged ||= ['updated', 'merged'].includes(integrated)
-    if (integrated === 'diverged') return { kind: 'diverged' as const, workspaceChanged }
-    const needsPush = ['ahead', 'merged'].includes(integrated)
+    workspaceChanged ||= integrated.workspaceChanged
+    if (integrated.kind === 'diverged') return { kind: 'diverged' as const, workspaceChanged }
+    const needsPush = ['ahead', 'merged'].includes(integrated.kind)
     if (!needsPush || await pushCurrentHead(options, connection)) {
       return { kind: 'synced' as const, workspaceChanged }
     }
@@ -92,10 +93,10 @@ async function fetchAndIntegrate(options: GitRemoteOptions, connection: GitConne
     requireActiveSync(options.signal)
     // Edits may have arrived while fetching; checkpoint them before replacement.
     const checkpoint = await checkpointLocal(options, connection, author)
-    // The save lock is still held and the fresh-byte checkpoint matches remote.
-    if (checkpoint.oid === remoteOid) return { value: 'equal' as const, workspaceChanged: false }
-    const value = await createGitVault(connection).integrate(remoteOid, author)
-    return { value, workspaceChanged: ['updated', 'merged'].includes(value) }
+    // Recovery can replace files even when the fresh checkpoint now matches remote.
+    const kind = checkpoint.oid === remoteOid ? 'equal' : await createGitVault(connection).integrate(remoteOid, author)
+    const workspaceChanged = checkpoint.workspaceChanged || ['updated', 'merged'].includes(kind)
+    return { value: { kind, workspaceChanged }, workspaceChanged }
   })
 }
 

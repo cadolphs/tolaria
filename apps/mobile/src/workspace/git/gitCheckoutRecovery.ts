@@ -15,8 +15,9 @@ export async function checkoutGitFastForward(context: GitVaultContext, branch: s
 
 export async function recoverGitCheckout(context: GitVaultContext) {
   const journal = await readJournal(context)
-  if (!journal) return
+  if (!journal) return false
   await finishCheckout(context, journal)
+  return true
 }
 
 async function finishCheckout(context: GitVaultContext, journal: CheckoutJournal) {

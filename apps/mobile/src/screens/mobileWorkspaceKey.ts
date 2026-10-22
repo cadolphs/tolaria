@@ -82,6 +82,7 @@ function probeKeySegments(input: MobileWorkspaceKeyInput) {
 
 function snapshotKeySegments(input: MobileWorkspaceKeyInput) {
   const sourceInfo = input.snapshot.source
+  if (input.source === 'native') return nativeSnapshotKey(sourceInfo)
   return [
     sourceInfo?.kind ?? 'fixture',
     sourceInfo?.alias ?? 'no-workspace-alias',
@@ -90,6 +91,10 @@ function snapshotKeySegments(input: MobileWorkspaceKeyInput) {
     input.snapshot.notes[0]?.id ?? 'empty',
     input.snapshot.selectedNoteId ?? 'no-selected-note',
   ]
+}
+
+function nativeSnapshotKey(sourceInfo: MobileWorkspaceSnapshot['source']) {
+  return [sourceInfo?.kind ?? 'native', sourceInfo?.vaultPath ?? sourceInfo?.alias ?? 'unselected']
 }
 
 function probeKey(enabled: boolean, name: string) {

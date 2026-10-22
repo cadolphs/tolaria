@@ -268,8 +268,9 @@ rejection to the descriptor-relative stat. No file state is cached.
 Expo metadata/mutation calls and awaited Git progress callbacks. Requests share
 one pending timer after a sixteen-millisecond budget; each synchronous operation
 runs immediately after rechecking that budget, including concurrent resumptions.
-Completed asynchronous native byte/directory reads renew the budget without an
-extra timer because they already return control through the native event loop.
+Native byte/directory reads share that budget rather than resetting it on promise
+completion: a chain of fast native promises does not prove that input or timers
+had a turn. Only the actual shared timer resets the budget (ADR 0274).
 This is not a new mutation queue or a latency guarantee for individual
 large operations (ADR 0209).
 Transport progress deliberately keeps a separate budget from native filesystem
@@ -283,7 +284,11 @@ same-length rapid edits that the library's coarse timestamp shortcut misses.
 This requires a content scan; the measured large-vault sync cost remains a
 release blocker, not hidden behind a misleading success/performance claim.
 `workspaceWriteQueue.ts` retains failed mutations in order and drains them before
-Git. `workspaceSyncEditors.ts` collects awaitable editor preparation operations;
+Git. Its saved-workspace callback receives whether native text-journal recovery
+replaced files. That recovery cannot be dismissed by a later unchanged or
+cancelled task: the saved-vault boundary keeps the replacement generation and
+awaits fresh editors, including when fresh indexing fails.
+`workspaceSyncEditors.ts` collects awaitable editor preparation operations;
 `editorSaveGate.ts` prevents stale TenTap replies from overwriting pulled content.
 Automatic foreground sync defers at each local write barrier while the rich
 editor is focused, including the barrier after a Git network wait. This does not
@@ -318,13 +323,32 @@ index/bridge time, snapshot construction, throwaway interaction timings and
 JavaScript scheduling delay separately from the Git round-trip measurements.
 `savedVaultOperation.ts`
 freezes/flushes editors, drains disk writes, invalidates old callback generations,
-and remounts from disk; a pre-barrier failure instead resumes the existing draft.
-A confirmed no-change folder-picker cancellation or Git result also resumes that draft without
+and publishes a freshly prepared disk snapshot; a pre-barrier failure instead resumes the existing draft.
+`useWorkspaceSnapshotFrame` swaps revision-scoped snapshot/history stores after
+that publication without remounting the same-root workspace controller. Search,
+navigation and mounted list surfaces survive; editor documents alone receive a
+new revision key. Retired stores retain their own late persistence completions,
+while prepared actions and retries require both the current generation and exact
+frame identity. Ordinary parent renders do not reset drafts or history. Switching
+the actual native root still remounts the workspace. This does not authorize edits
+through a replacement barrier or make provisional cached previews writable (ADR 0275).
+The native Reload Vault command reselects the current managed entry silently,
+using that same save/recovery/fresh-preparation boundary instead of synchronously
+rebuilding from the consumed launch index. No selected catalog entry means no
+native reload, never a fallback filesystem scan. Fixture/host reloads retain
+their repository behavior and clear undo history after replacement.
+A confirmed no-change folder-picker cancellation or Git result without native recovery also resumes that draft without
 re-indexing or remounting. It restores the frozen editor's callback generation;
 replacement IDs are never reused, and an older cancellation cannot undo a newer
 replacement. Failures after import or Git starts still require the disk refresh.
-`gitRemote` reports whether checkout changed document files; local commits and
-push-only/no-op syncs preserve the mounted editor under ADR 0212.
+`gitRemote` reports both incoming checkout and checkpoint-time journal recovery
+as document replacement. Recovery requires fresh editors even when it advances
+HEAD to the fetched tip or credentials fail afterwards. Local commits and
+push-only/no-op syncs with no recovery preserve the mounted editor under ADR 0221.
+The shared Git checkpoint/require-clean result reports successful checkout
+recovery as `workspaceChanged`, separately from the count of newly committed
+files. Manual commits honor that same replacement flag; sync consumes it without
+replaying a second recovery check just to discover whether files changed.
 Relationship-picker exclusions resolve each existing reference once per search,
 then filter candidate IDs with a set. They must not resolve a vault-wide link
 inside the per-note candidate loop.
@@ -470,7 +494,8 @@ validates a staged copy before replacing the previous managed folder. Import and
 restore failures reach the vault manager; cancellation alone returns no selection.
 Expo filesystem reads likewise propagate failures instead of synthesizing empty content.
 `WorkspaceLoadBoundary` keeps vault-management controls available after a read or
-render failure; a successful vault operation remounts the boundary from the new revision.
+render failure; a successful vault revision resets a failed boundary without
+remounting healthy workspace children.
 
 `useMobileNoteRead` handles lazy selected-note reads independently of workspace
 loading. It exposes loading/error/retry before the editor mounts, cancels stale
@@ -822,8 +847,8 @@ existing repository pipeline.
 | `mobileUiWorkspaceSourceRequest` | Maps the active native selection, explicit launch query and environment defaults to the workspace request; owns persistence-probe repository/request selection outside the rendering shell |
 | `preparedWorkspaceSnapshot` | Weak, single-use handoff keyed by the exact index/array identities and vault/config identity; a repaired or mismatched index cannot reuse it, and later reads do not retain a cached snapshot |
 | `workspaceSnapshotCache` / `workspaceSnapshotStorage.native` | Disposable, size-bounded snapshot reuse only after a fresh native text-digest/index identity match, payload integrity and editable-source checks; date labels refresh without rebuilding metadata (ADR 0238) |
-| `workspaceSnapshotEnvelope` / `workspaceSnapshotPreview` | Shared version/build/root/config-bound envelope integrity and a distinct provisional metadata reader; preview results exclude document sources/blocks and sync authority, while editable cache hits still require fresh index/source validation (ADR 0241). The native read-only benchmark reports preview time separately from fresh indexing, not as a screen-paint measurement |
-| `nativeWorkspaceStartupPreview` / `MobileWorkspaceStartup` | Managed-root/recovery-checked, 250 ms best-effort cached presentation before background indexing; metadata supports scrolling, sidebar filtering and queued note selection, but never editor/write/sync authority. Selection is carried into the freshly prepared workspace by ID, validated against fresh notes there. Late cache results cannot replace an active workspace (ADRs 0242, 0273) |
+| `workspaceSnapshotEnvelope` / `workspaceSnapshotPreview` | Shared version/build/root/config-bound envelope integrity and a distinct provisional metadata reader; preview results exclude document sources/blocks and sync authority, while editable cache hits still require fresh index/source validation (ADR 0241). Cancelled envelope reads stop before IO and discard late IO/checksum results before JSON decoding. The native read-only benchmark reports preview time separately from fresh indexing, not as a screen-paint measurement |
+| `nativeWorkspaceStartupPreview` / `MobileWorkspaceStartup` | Managed-root/recovery-checked, 250 ms best-effort cached presentation. Catalog restoration queues preview authorization before indexing, but overlaps presentation IO with fresh preparation rather than awaiting optional cache results. Preparation success/failure cancels late presentation; retry and unmount retain load isolation. Metadata supports scrolling, sidebar filtering and queued note selection, but never editor/write/sync authority. Selection is carried into the freshly prepared workspace by ID, validated against fresh notes there. Late cache results cannot replace an active workspace (ADRs 0242, 0273) |
 | `MobilePanelSafeArea` | Applies the existing safe-area context's top inset in the initial panel layout, avoiding a second native measurement and a zero-inset flash during panel remount; backgrounds/dividers remain edge-to-edge, with no bottom footer inset |
 | `localVaultFileKinds` / `localVaultPresentation` | Shared file classification and date/count presentation used by fresh parsing and validated cached snapshots |
 | `MobileFilePreview` / `mobileFilePreviewSource` | Desktop extension rules and validated vault-local paths feed native image previews and iOS WebKit PDF rendering without reading binary files into JavaScript. Image load errors and unsupported platform formats retain the existing fallback; each selected URI owns its loading/error state. PDF navigation is file-scoped with JavaScript disabled. Android PDF rendering remains unsupported. |
@@ -876,8 +901,12 @@ provider behavior still require separate device acceptance.
 `views/*.yml` into `MobileWorkspaceSnapshot`: type-color inheritance, Type metadata
 and raw content, instance schema/defaults, relationship values, Markdown previews,
 sidebar counts, custom scalar properties, empty folders and saved View results.
-Raw content is capped to visible notes while metadata covers the full pool. Type
-metadata follows desktop-normalized frontmatter aliases for casing and spacing,
+Raw content is capped to visible notes while metadata covers the full pool.
+Relationship-target indexing yields every 32 normalized targets through the same
+snapshot iterator and cooperative task budget. This bounds both multi-note and
+alias-heavy indexing work without publishing a partial resolver or changing
+first-match precedence. Cancellation is checked before the next batch runs.
+Type metadata follows desktop-normalized frontmatter aliases for casing and spacing,
 preserving underscore-only system fields such as `_organized`. Host QA injects
 full Markdown separately through `tolaria:mobile-workspace-note-contents`, allowing
 lazy hydration when navigation opens a metadata-only note.

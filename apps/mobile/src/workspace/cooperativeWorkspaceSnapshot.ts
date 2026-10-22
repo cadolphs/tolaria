@@ -8,7 +8,7 @@ type SnapshotPreparation = { storage?: SnapshotCacheStorage | null; onCache?: (h
 /** Reuse the existing task budget without changing the synchronous parser's results. */
 export async function buildCooperativeWorkspaceSnapshot(options: LocalVaultSnapshotOptions, signal?: AbortSignal, preparation: SnapshotPreparation = {}) {
   requireActiveSnapshotLoad(signal)
-  const cache = await openWorkspaceSnapshotCache(options, preparation.storage === undefined ? workspaceSnapshotStorage : preparation.storage)
+  const cache = await openWorkspaceSnapshotCache(options, preparation.storage === undefined ? workspaceSnapshotStorage : preparation.storage, signal)
   requireActiveSnapshotLoad(signal)
   preparation.onCache?.(cache.snapshot !== null)
   if (cache.snapshot) return cache.snapshot

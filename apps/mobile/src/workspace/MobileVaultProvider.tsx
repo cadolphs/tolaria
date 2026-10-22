@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react'
 import { MobileWorkspaceLoadFailure } from '../components/vaults/MobileWorkspaceLoadFailure'
 import { NativeWorkspaceContext } from './NativeWorkspaceContext'
 import { MobileVaultControlsContext, MobileVaultPickerContext } from './MobileVaultContext'
-import { WorkspaceSyncEditorsContext } from './workspaceSyncEditors'
+import { WorkspaceSnapshotRevisionContext, WorkspaceSyncEditorsContext } from './workspaceSyncEditors'
 import { useMobileVaults } from './git/useMobileVaults'
 import { WorkspaceLoadBoundary } from './WorkspaceLoadBoundary'
 import { MobileSettingsSheet } from '../settings/MobileSettingsSheet'
@@ -37,12 +37,14 @@ export function MobileVaultProvider({ children }: { children: ReactNode }) {
   return <MobileVaultPickerContext.Provider value={picker}><WorkspaceSyncEditorsContext.Provider value={editors}>
     <NativeWorkspaceContext.Provider value={workspace}>
       <MobileVaultControlsContext.Provider value={controls}>
-        <WorkspaceLoadBoundary key={revision} fallback={<MobileWorkspaceLoadFailure onManage={open} />}>
+        <WorkspaceLoadBoundary resetKey={revision} fallback={<MobileWorkspaceLoadFailure onManage={open} />}>
+          <WorkspaceSnapshotRevisionContext.Provider value={revision}>
           {recovery?.reason ? <MobileWorkspaceLoadFailure onManage={open} onRetry={recovery.retry} reason={recovery.reason} /> :
             <MobileWorkspaceStartup preview={manager.catalog.preview} pending={restorePending} hasActiveWorkspace={Boolean(active.selection)}
               onSelectNote={manager.catalog.selectPreviewNote}>
               {children}
             </MobileWorkspaceStartup>}
+          </WorkspaceSnapshotRevisionContext.Provider>
         </WorkspaceLoadBoundary>
         <MobileSettingsSheet manager={manager} />
         {!manager.opened && manager.notices.current && <MobileVaultNotice notice={manager.notices.current}

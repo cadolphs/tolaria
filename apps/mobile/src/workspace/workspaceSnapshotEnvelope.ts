@@ -15,15 +15,26 @@ function presentationIdentity(options: WorkspaceSnapshotIdentity, revision?: str
     options.vaultAlias, options.maxNotes, serializeMobileVaultConfig(options.vaultConfig ?? {})])
 }
 
-export async function readWorkspaceSnapshotEnvelope(storage: SnapshotCacheStorage, key: string, options: WorkspaceSnapshotIdentity) {
-  const text = await storage.read(key)
-  if (!text || text.length > maxPayloadCharacters * 2 + 65536) return null
-  const record: CacheRecord = JSON.parse(text)
+export async function readWorkspaceSnapshotEnvelope(storage: SnapshotCacheStorage, key: string,
+  options: WorkspaceSnapshotIdentity, signal?: AbortSignal) {
+  const record = await readRecord(storage, key, signal)
   if (!validRecord(record, presentationIdentity(options, storage.revision))) return null
-  if (await storage.digest(checksumInput(record)) !== record.checksum) return null
+  if (!await matchesChecksum(storage, record, signal)) return null
   const snapshot: MobileWorkspaceSnapshot = JSON.parse(record.payload)
   if (!validSnapshot(snapshot, options)) return null
   return { input: record.input, snapshot }
+}
+
+async function readRecord(storage: SnapshotCacheStorage, key: string, signal?: AbortSignal): Promise<CacheRecord | null> {
+  if (signal?.aborted) return null
+  const text = await storage.read(key)
+  if (signal?.aborted || !text || text.length > maxPayloadCharacters * 2 + 65536) return null
+  return JSON.parse(text)
+}
+
+async function matchesChecksum(storage: SnapshotCacheStorage, record: CacheRecord, signal?: AbortSignal) {
+  const checksum = await storage.digest(checksumInput(record))
+  return !signal?.aborted && checksum === record.checksum
 }
 
 export async function writeWorkspaceSnapshotEnvelope(storage: SnapshotCacheStorage,

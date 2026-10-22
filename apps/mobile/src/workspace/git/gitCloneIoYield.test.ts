@@ -11,10 +11,14 @@ vi.mock('isomorphic-git', async importOriginal => {
 beforeEach(() => { vi.useFakeTimers(); clone.mockReset(); clone.mockResolvedValue(undefined) })
 afterEach(() => { vi.restoreAllMocks(); vi.useRealTimers() })
 
-it.each([1, 20])('still yields progress after %i native IO completions renew the filesystem budget', async (reads) => {
+it.each([1, 20])('keeps progress independently budgeted after %i native reads', async (reads) => {
   const { fs, now, progress, onProgress } = await fixture()
   now.mockReturnValue(17)
-  for (let index = 0; index < reads; index++) await fs.promises.readdir('/vault')
+  for (let index = 0; index < reads; index++) {
+    const read = fs.promises.readdir('/vault')
+    await vi.runAllTimersAsync()
+    await read
+  }
   const result = progress?.({ phase: 'Updating workdir', loaded: 20, total: 3000 })
   expect(onProgress).not.toHaveBeenCalled()
   expect(vi.getTimerCount()).toBe(1)
@@ -27,7 +31,9 @@ it('observes cancellation while waiting for the progress task boundary', async (
   const controller = new AbortController()
   const { fs, now, progress, onProgress } = await fixture(controller.signal)
   now.mockReturnValue(17)
-  await fs.promises.readdir('/vault')
+  const read = fs.promises.readdir('/vault')
+  await vi.runAllTimersAsync()
+  await read
   const result = Promise.resolve(progress?.({ phase: 'Updating workdir', loaded: 20, total: 3000 }))
     .then(() => null, error => error)
   controller.abort()

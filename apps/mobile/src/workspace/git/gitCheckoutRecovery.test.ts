@@ -56,7 +56,7 @@ it('finishes an interrupted checkout before checkpointing after a restart', asyn
   const interrupted = { ...context, fs: interruptedFileSystem(join(context.dir, 'b.md')) }
   await expect(createGitVault(interrupted).integrate(remote)).rejects.toThrow()
   const result = await createGitVault(context).checkpoint(author)
-  expect(result).toEqual({ changedFiles: 0, oid: remote })
+  expect(result).toEqual({ changedFiles: 0, oid: remote, workspaceChanged: true })
   expect(await readFile(join(context.dir, 'a.md'), 'utf8')).toBe('# After A\n')
   expect(await readFile(join(context.dir, 'b.md'), 'utf8')).toBe('# After B\n')
   expect(await readFile(join(context.dir, 'added.md'), 'utf8')).toBe('# Added remotely\n')
@@ -86,7 +86,7 @@ it('recovers when the files and HEAD were updated but clearing the journal faile
   }
   await expect(createGitVault(interrupted).integrate(remote)).rejects.toThrow()
   expect(await git.resolveRef({ ...context, ref: 'HEAD' })).toBe(remote)
-  expect(await createGitVault(context).checkpoint(author)).toEqual({ changedFiles: 0, oid: remote })
+  expect(await createGitVault(context).checkpoint(author)).toEqual({ changedFiles: 0, oid: remote, workspaceChanged: true })
   await expect(readFile(journalPath)).rejects.toMatchObject({ code: 'ENOENT' })
 })
 

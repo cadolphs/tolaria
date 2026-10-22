@@ -14,11 +14,11 @@ export function persistWorkspaceOperations(root: string, operations: WorkspaceWr
   })
 }
 
-export function withSavedWorkspace<T>(root: string, operation: () => Promise<T>): Promise<T> {
+export function withSavedWorkspace<T>(root: string, operation: (recovered: boolean) => Promise<T>): Promise<T> {
   return withWorkspaceOperation(root, async () => {
     await flushWorkspaceWrites(root)
-    recoverNativeWorkspaceText(root)
-    return operation()
+    const recovered = recoverNativeWorkspaceText(root)
+    return operation(recovered)
   })
 }
 

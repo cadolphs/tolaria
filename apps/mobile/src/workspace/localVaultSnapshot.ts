@@ -136,7 +136,7 @@ export function* localVaultWorkspaceSnapshotSteps(options: LocalVaultSnapshotOpt
   const allNoteEntries = [...entries].sort(compareByModifiedDate)
   const visibleEntries = visibleNoteEntries(entries)
   const selectedEntries = visibleEntries.slice(0, maxNotes)
-  const resolveRelationship = relationshipResolver(entries, workspaceAlias)
+  const resolveRelationship = yield* relationshipResolver(entries, workspaceAlias)
   yield
   const allNotes = yield* mapSnapshotItems(allNoteEntries, (entry) => localEntryToMobileNote(entry, resolveRelationship, workspaceIdentity, 'summary'))
   const notes = yield* mapSnapshotItems(selectedEntries, (entry) => localEntryToMobileNote(entry, resolveRelationship, workspaceIdentity, 'editable'))
@@ -473,11 +473,13 @@ function scalarPropertyArrayItem(value: unknown): string[] {
   return []
 }
 
-function relationshipResolver(entries: LocalVaultEntry[], workspaceAlias: string | null): RelationshipResolver {
+function* relationshipResolver(entries: LocalVaultEntry[], workspaceAlias: string | null): Generator<void, RelationshipResolver> {
   const index = new Map<string, LocalVaultEntry>()
+  let batchSize = 0
   for (const entry of entries) {
     for (const target of relationshipResolverTargets(entry, workspaceAlias)) {
       addRelationshipResolverTarget(index, target, entry)
+      if (++batchSize === 32) { batchSize = 0; yield }
     }
   }
 

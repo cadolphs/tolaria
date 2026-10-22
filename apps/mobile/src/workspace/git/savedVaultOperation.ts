@@ -15,13 +15,14 @@ export async function runSavedVaultOperation({ editors, rootUri, run, refresh, d
   const resume = await editors.prepare(deferWhileFocused?.())
   let saved = false
   let cancelled = false
+  let recovered = false
   let cancelReplacement = () => {}
   try {
-    if (rootUri) await withSavedWorkspace(rootUri, async () => {})
+    if (rootUri) recovered = await withSavedWorkspace(rootUri, async changed => changed)
     saved = true
     cancelReplacement = editors.beginReplacement()
     const result = await run()
-    cancelled = result === 'cancelled' || result === 'unchanged'
+    cancelled = !recovered && (result === 'cancelled' || result === 'unchanged')
   } finally {
     if (cancelled) cancelReplacement()
     // Changed or possibly changed files require fresh editors, even after failure.

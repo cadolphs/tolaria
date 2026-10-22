@@ -2,6 +2,8 @@ import { requireOptionalNativeModule } from 'expo'
 import { createFileSystemWorkspaceRepository } from '../workspace/fileSystemWorkspaceRepository'
 import { expoWorkspaceFileSystem } from '../workspace/expoWorkspaceFileSystem'
 import { withSavedWorkspace } from '../workspace/git/workspaceWriteQueue'
+import { runSavedVaultOperation } from '../workspace/git/savedVaultOperation'
+import { createWorkspaceSyncEditors } from '../workspace/workspaceSyncEditors'
 import { postNativeQaEvent, setNativeQaSinkUrl } from './nativeQaSink'
 import { nativeEntryRecoveryChecks } from './nativeEntryRecoveryProbe'
 import { nativeBatchRecoveryChecks } from './nativeBatchRecoveryProbe'
@@ -86,9 +88,28 @@ async function verifyRecovery(module: ProbeModule, before: Inspection) {
     completeFrontmatter: after.content === '---\ncustom: retained\n---\n# Recovered\n',
     journalCleared: !after.pending,
     completedRetryPreservesLaterEdit: retried.content === '# Later external edit\n' && !retried.pending,
+    recoveredEditorRefreshed: await verifyRecoveredEditor(module),
   }
   await module.runTextRecoveryProbe('cleanup')
   return checks
+}
+
+async function verifyRecoveredEditor(module: ProbeModule) {
+  const pending = await module.runTextRecoveryProbe('prepare')
+  const editors = createWorkspaceSyncEditors()
+  let resumed = false
+  let refreshed = false
+  editors.register(async () => () => { resumed = true }, 'note.md')
+  await runSavedVaultOperation({
+    editors, rootUri: pending.rootUri,
+    run: async () => 'unchanged',
+    refresh: async selected => {
+      const recovered = await module.runTextRecoveryProbe('inspect')
+      refreshed = selected === 'note.md' && !recovered.pending
+        && recovered.content === '---\ncustom: retained\n---\n# Recovered\n'
+    },
+  })
+  return refreshed && !resumed && editors.generation() === 1
 }
 
 async function verifyConflict(module: ProbeModule, before: Inspection) {

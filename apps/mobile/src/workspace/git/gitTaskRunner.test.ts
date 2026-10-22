@@ -63,31 +63,62 @@ it('keeps unrelated instances independent', async () => {
   expect(await Promise.all(tasks)).toEqual([1, 2])
 })
 
-it('does not retain a failed operation or block later work', async () => {
+it.each(['run', 'readNative'] as const)('does not retain a failed %s operation or block later work', async method => {
   const setTime = clock()
-  const { run } = createGitTaskRunner()
+  const tasks = createGitTaskRunner()
   setTime(16)
-  const failed = expect(run(() => { throw new Error('nativeFailure') })).rejects.toThrow('nativeFailure')
+  const execute = method === 'run' ? tasks.run : tasks.readNative
+  const failed = expect(execute(async () => { throw new Error('nativeFailure') })).rejects.toThrow('nativeFailure')
   await vi.advanceTimersByTimeAsync(0)
   await failed
-  expect(await run(() => 'next')).toBe('next')
+  expect(await tasks.run(() => 'next')).toBe('next')
   expect(vi.getTimerCount()).toBe(0)
 })
 
-it('renews the work budget after genuine native IO completes', async () => {
+it('yields before starting native IO when the current budget is spent', async () => {
   const setTime = clock()
   const tasks = createGitTaskRunner()
   setTime(100)
-  expect(await tasks.readNative(async () => 'bytes')).toBe('bytes')
+  const read = vi.fn(async () => 'bytes')
+  const result = tasks.readNative(read)
+  expect(read).not.toHaveBeenCalled()
+  expect(vi.getTimerCount()).toBe(1)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(await result).toBe('bytes')
   expect(await tasks.run(() => 'metadata')).toBe('metadata')
   expect(vi.getTimerCount()).toBe(0)
 })
 
-it('renews the work budget after failed native IO without hiding the error', async () => {
+it('lets input run before a 6,000-file sequence of quick native reads finishes', async () => {
   const setTime = clock()
   const tasks = createGitTaskRunner()
-  setTime(100)
-  await expect(tasks.readNative(async () => { throw new Error('readFailure') })).rejects.toThrow('readFailure')
-  expect(await tasks.run(() => 'metadata')).toBe('metadata')
-  expect(vi.getTimerCount()).toBe(0)
+  let completed = 0
+  const input = vi.fn(() => completed)
+  setTimeout(input, 0)
+  const reads = (async () => {
+    for (let index = 0; index < 6000; index += 1) {
+      setTime(index)
+      expect(await tasks.readNative(async () => index)).toBe(index)
+      completed += 1
+    }
+  })()
+  await vi.runAllTimersAsync()
+  await reads
+  expect(input).toHaveReturnedWith(16)
+  expect(completed).toBe(6000)
+})
+
+it('does not forgive spent CPU time when a native read fails', async () => {
+  const setTime = clock()
+  const tasks = createGitTaskRunner()
+  await expect(tasks.readNative(async () => {
+    setTime(20)
+    throw new Error('readFailure')
+  })).rejects.toThrow('readFailure')
+  const work = vi.fn(() => 'metadata')
+  const next = tasks.run(work)
+  expect(work).not.toHaveBeenCalled()
+  expect(vi.getTimerCount()).toBe(1)
+  await vi.advanceTimersByTimeAsync(0)
+  expect(await next).toBe('metadata')
 })

@@ -17,10 +17,9 @@ export function createGitTaskRunner() {
   }
   return {
     run,
-    // Only native asynchronous IO belongs here, not arbitrary resolved promises.
+    // Native promises can complete without an input/timer turn; retain the budget.
     readNative: async <T>(operation: () => Promise<T>): Promise<T> => {
-      try { return await operation() }
-      finally { resumedAt = performance.now() }
+      return run(operation)
     },
   }
 }

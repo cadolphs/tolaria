@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { workspaceScenarioForId } from '../fixtures/workspaceFixtures'
 import { TabletEditorPanel } from './TabletEditorPanel'
 import type { MobileNote } from '../workspace/mobileWorkspaceModel'
-import { createWorkspaceSyncEditors, WorkspaceSyncEditorsContext } from '../workspace/workspaceSyncEditors'
+import { createWorkspaceSyncEditors, WorkspaceSnapshotRevisionContext, WorkspaceSyncEditorsContext } from '../workspace/workspaceSyncEditors'
 
 type SurfaceProps = { children?: ReactNode; testID?: string }
 function Surface({ children, testID }: SurfaceProps) {
@@ -41,7 +41,9 @@ vi.mock('../workspace/mobileAttachmentImport', () => ({ useMobileAttachmentImpor
 vi.mock('../workspace/mobileAttachmentOpen', () => ({ useMobileAttachmentLinkOpener: () => vi.fn() }))
 vi.mock('../components/workspace/MobileEditorBlocks', () => ({ MobileEditorBlocks: () => null }))
 vi.mock('../components/workspace/MobileFilePreview', () => ({ MobileFilePreview: () => null }))
-vi.mock('../components/workspace/MobileWysiwygMarkdownEditor', () => ({ MobileWysiwygMarkdownEditor: () => null }))
+vi.mock('../components/workspace/MobileWysiwygMarkdownEditor', () => ({
+  MobileWysiwygMarkdownEditor: ({ note }: { note: MobileNote }) => createElement('div', { 'data-rich-note': note.id }),
+}))
 vi.mock('../components/workspace/MobileMarkdownSourceEditor', () => ({
   MobileMarkdownSourceEditor: ({ note }: { note: MobileNote }) => createElement('div', { 'data-source-note': note.id }),
 }))
@@ -51,6 +53,30 @@ vi.mock('./TabletEditorPanelChrome', () => ({ EmptyEditorPanel: () => null, Mobi
 let root: ReturnType<typeof createRoot> | undefined
 beforeEach(() => vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true))
 afterEach(async () => { await act(async () => root?.unmount()); vi.unstubAllGlobals() })
+
+it('replaces only the rich document on a new revision, retaining the toolbar control', async () => {
+  const h = createHarness()
+  await h.select(0)
+  const document = h.host.querySelector('[data-rich-note]')
+  const control = h.button('editor-source-action')
+  await h.select(0, 0)
+  expect(h.host.querySelector('[data-rich-note]')).toBe(document)
+  await h.select(0, 1)
+  expect(h.host.querySelector('[data-rich-note]')).not.toBe(document)
+  expect(h.button('editor-source-action')).toBe(control)
+})
+
+it('replaces a raw document on a new revision without resetting source mode or chrome', async () => {
+  const h = createHarness()
+  await h.select(0)
+  await act(async () => h.button('editor-source-action').click())
+  const document = h.host.querySelector('[data-source-note]')
+  const control = h.button('editor-source-action')
+  await h.select(0, 1)
+  expect(h.host.querySelector('[data-source-note]')).not.toBeNull()
+  expect(h.host.querySelector('[data-source-note]')).not.toBe(document)
+  expect(h.button('editor-source-action')).toBe(control)
+})
 
 it('keeps the same raw-mode control through note selection and completes its press on the new note', async () => {
   const harness = createHarness()
@@ -135,10 +161,10 @@ function createHarness() {
       if (!button) throw new Error(`Missing ${testID}`)
       return button
     },
-    select: (index: number) => act(async () => {
-      root?.render(createElement(WorkspaceSyncEditorsContext.Provider, { value: editors }, createElement(TabletEditorPanel, { blocks: [], bullets: [], compact: false, notes,
+    select: (index: number, revision = 0) => act(async () => {
+      root?.render(createElement(WorkspaceSnapshotRevisionContext.Provider, { value: revision }, createElement(WorkspaceSyncEditorsContext.Provider, { value: editors }, createElement(TabletEditorPanel, { blocks: [], bullets: [], compact: false, notes,
         note: notes[index], onUpdateContent: vi.fn(), onToggleFavorite: vi.fn(), onOpenMoreActions: vi.fn(), onNavigateWikilink: vi.fn(),
-        renameFilename: { value: 'renamed.md', notes, onChange: vi.fn(), onSubmit: vi.fn() } })))
+        renameFilename: { value: 'renamed.md', notes, onChange: vi.fn(), onSubmit: vi.fn() } }))))
     }),
   }
 }
