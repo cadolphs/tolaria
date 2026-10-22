@@ -107,3 +107,9 @@ CODE-HEALTH-REPORT.md
 # Expo native projects are generated locally by `expo prebuild`.
 apps/mobile/ios/
 apps/mobile/android/
+
+# Videos package (Remotion promo generation, isolated from main build)
+videos/node_modules/
+videos/output/
+videos/dist/
+videos/.remotion/
