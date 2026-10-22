@@ -2,6 +2,7 @@ import type { MobileTelemetryContext } from './mobileTelemetryContext'
 
 export type MobileAnalyticsEvent =
   | { name: 'mobile_startup_preview_used' }
+  | { name: 'mobile_editor_recovery_requested'; reason: 'contentProcessTerminated' | 'renderProcessGone' }
   | { name: 'mobile_update_channel_selected'; channel: 'stable' | 'alpha'; outcome: 'idle' | 'checking' | 'downloading' | 'ready' | 'current' | 'unavailable' | 'failed' | 'restarting' }
   | { name: 'note_created' | 'note_deleted' | 'vault_opened' | 'vault_switched' | 'search_used' | 'commit_made' }
   | { name: 'mobile_git_clone_cancel_requested' }
@@ -55,6 +56,7 @@ export function createMobileAnalytics({ configured, createId, platform, context,
 
 // Select properties explicitly: never spread caller objects into telemetry.
 function eventProperties(event: MobileAnalyticsEvent): Record<string, string> {
+  if (event.name === 'mobile_editor_recovery_requested') return { reason: event.reason }
   if (event.name === 'mobile_folder_open_failed') return { stage: event.stage }
   if (event.name === 'mobile_update_channel_selected') return { channel: event.channel, outcome: event.outcome }
   return workspaceEventProperties(event)

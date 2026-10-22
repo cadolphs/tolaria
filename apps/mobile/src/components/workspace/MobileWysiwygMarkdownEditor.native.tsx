@@ -22,8 +22,17 @@ import { MobileWysiwygWikilinkPicker } from './MobileWysiwygWikilinkPicker'
 import type { MobileWysiwygMarkdownEditorProps, NativeWysiwygPickerState, NativeWysiwygExternalLinkSheetState, NativeTentapEditorSurfaceProps, NativeTentapEditorSurfaceActionProps, NativeTentapEditorSurfaceActions } from './MobileNativeEditor.types'
 import { nativeWysiwygEditorState, nativeWysiwygEditorSelection, applyNativeWysiwygExternalLink, insertImportedAttachment, insertClipboardPlainText } from './mobileNativeEditorOperations'
 import { useNativeTentapEditorBridge, initialNativeEditorContent } from './useMobileNativeEditorRuntime'
+import { useNativeEditorRecovery, type NativeEditorRecoveryHandlers } from './useNativeEditorRecovery'
+
+type SessionProps = MobileWysiwygMarkdownEditorProps & NativeEditorRecoveryHandlers
+type SurfaceProps = NativeTentapEditorSurfaceProps & NativeEditorRecoveryHandlers
 
 export function MobileWysiwygMarkdownEditor(props: MobileWysiwygMarkdownEditorProps) {
+  const recovery = useNativeEditorRecovery()
+  return <NativeEditorSession key={recovery.generation} {...props} onProcessLoss={recovery.onProcessLoss} />
+}
+
+function NativeEditorSession(props: SessionProps) {
   const {
     blocks,
     bullets,
@@ -68,6 +77,7 @@ export function MobileWysiwygMarkdownEditor(props: MobileWysiwygMarkdownEditorPr
   return (
     <NativeTentapEditorSurface
       {...bridge}
+      onProcessLoss={reason => { bridge.retireEditor(); props.onProcessLoss(reason) }}
       vaultRootUri={vaultRootUri}
       previewMarkdown={mobileDocumentBody(initialNativeEditorContent({ blocks, bullets, note }))}
       layoutProbe={layoutProbe}
@@ -86,7 +96,7 @@ export function MobileWysiwygMarkdownEditor(props: MobileWysiwygMarkdownEditorPr
   )
 }
 
-function NativeTentapEditorSurface(props: NativeTentapEditorSurfaceProps) {
+function NativeTentapEditorSurface(props: SurfaceProps) {
   const { nativeEditorStyles } = useMobileStyles(createThemeStyles)
   const fileSource = useMobileEditorFileSource(props.vaultRootUri, props.previewMarkdown)
   const {
@@ -152,6 +162,8 @@ function NativeTentapEditorSurface(props: NativeTentapEditorSurfaceProps) {
           style={nativeEditorStyles.richText}
           testID="editor-wysiwyg-input"
           onLoadEnd={injectEditorCss}
+          onContentProcessDidTerminate={() => props.onProcessLoss('contentProcessTerminated')}
+          onRenderProcessGone={() => props.onProcessLoss('renderProcessGone')}
         />
       )}
       <MobileWysiwygSlashMenu editor={editor} />

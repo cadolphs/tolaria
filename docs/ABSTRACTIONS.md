@@ -826,6 +826,15 @@ TenTap; `mobileTiptapMarkdown` serializes editor nodes back to Markdown.
 `mobileDocumentContent.types` contains their type contracts. Rendering and
 serialization share those helpers without a runtime import cycle.
 
+`useNativeEditorRecovery` handles iOS WebContent termination and Android renderer
+loss without remounting the workspace or reloading the vault. It retires dead
+document requests before an editor-only session replacement; confirmed Markdown
+remains authoritative, never the empty dead WebView. `nativeEditorRecovery` queues
+replacement until foreground activity and the existing working-copy barrier allow
+it, rejects stale session callbacks, and does nothing on healthy foreground
+transitions. Opt-in recovery analytics contain only a fixed reason enum; local
+queue timing logs contain no note content, filenames or vault identifiers.
+
 `mobileWorkspaceEditing` retains edit dispatch and the public write-result API.
 Its type contracts live in `mobileWorkspaceEditing.types`; note creation,
 note mutations, snapshot projection, saved-view edits, and raw-content/frontmatter

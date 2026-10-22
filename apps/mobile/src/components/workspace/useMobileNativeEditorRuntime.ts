@@ -21,6 +21,7 @@ import type { NativeWysiwygSelection } from './MobileWysiwygWikilinkBridgeModel'
 import type { MobileWysiwygMarkdownEditorProps, NativeTentapEditorBridgeOptions, NativeTentapEditorRuntime, TimerHandle, NativeWysiwygEditorMutation, NativeWysiwygInlineAutocompleteHandler } from './MobileNativeEditor.types'
 import { detectNativeWysiwygInlineAutocomplete, insertWikilinkIntoNativeEditor, insertAttachmentIntoNativeEditor, insertMarkdownBlockIntoNativeEditor, insertPlainTextIntoNativeEditor, applyNativeWysiwygInputTransforms } from './mobileNativeEditorOperations'
 import { useNativeWysiwygTextProbes, useNativeWysiwygBlockProbes } from './useMobileNativeEditorProbes'
+import { retireNativeEditorSession } from './MobileWysiwygEditorLifecycle.native'
 
 const mobileTenTapBridgeExtensions = [
   ...TenTapStartKit,
@@ -78,6 +79,7 @@ export function useNativeTentapEditorBridge(options: NativeTentapEditorBridgeOpt
     editor,
     flushEditorDocument,
     injectEditorCss,
+    retireEditor: () => retireNativeEditorSession(refs),
   }
 }
 

@@ -137,6 +137,17 @@ export function useFlushOnUnmount(refs: NativeTentapEditorRefs, flushEditorDocum
   }, [flushEditorDocument, refs])
 }
 
+export function retireNativeEditorSession(refs: NativeTentapEditorRefs) {
+  cancelNativeInitialContentSync(refs)
+  clearTimer(refs.inlineAutocompleteTimerRef.current)
+  clearTimer(refs.saveTimerRef.current)
+  refs.acceptsEditorChangesRef.current = false
+  refs.hasAcceptedEditorChangeRef.current = false
+  refs.webViewLoadedRef.current = false
+  refs.editorRef.current = null
+  refs.documentReads.requests.dispose()
+}
+
 export function isContentSettableEditorBridge(editor: EditorBridge | null): editor is ContentSettableEditorBridge {
   return typeof (editor as Partial<ContentSettableEditorBridge> | null)?.setContent === 'function'
 }
