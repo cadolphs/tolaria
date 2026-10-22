@@ -1,5 +1,14 @@
 # Abstractions
 
+## Desktop Note Save Transport
+
+`persistContent` sends native desktop saves through `save_note_content_bytes`
+for notes over 256 Ki characters, using raw UTF-8 content and a base64 UTF-8 `x-tolaria-note-path` header. The
+command rejects malformed requests and delegates to `save_note_content`, retaining
+active-vault path validation and the existing off-thread atomic writer. This
+bounds the JSON note payload and avoids a full JSON copy of embedded image payloads; memory remains proportional
+to note length. Browser fixtures retain their JSON save API. See ADR 0278.
+
 Key abstractions and domain models in Tolaria.
 
 ## Mobile Note-List Creation
