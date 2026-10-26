@@ -1,4 +1,6 @@
 import { memo, useCallback, useEffect } from "react";
+import { useNoteListPaintedMark } from "../hooks/useNoteListPaintedMark";
+import { usePhoneNoteOpener } from "../hooks/phoneNoteStackStore";
 import type { NoteListMultiSelectionCommands } from "./note-list/multiSelectionCommands";
 import { NoteListLayout } from "./note-list/NoteListLayout";
 import { useMultiSelectKeyboard } from "./note-list/useMultiSelectKeyboard";
@@ -18,7 +20,10 @@ function NoteListInner({
 	multiSelectionCommandRef,
 	...props
 }: NoteListInnerProps) {
-	const model = useNoteListModel(props);
+	// On the phone a tapped note takes the screen, the open one included (TOL-193).
+	const onReplaceActiveTab = usePhoneNoteOpener(props.onReplaceActiveTab);
+	const model = useNoteListModel({ ...props, onReplaceActiveTab });
+	useNoteListPaintedMark(model.visibleEntries.length > 0);
 	useNoteListDeletionFocus({
 		entries: props.entries,
 		visible: model.visibleEntries,

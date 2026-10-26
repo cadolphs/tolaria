@@ -700,6 +700,233 @@ jobs:
           path: test-results/performance-summary.json
           destination: performance-summary.json
 
+  server-docker-build:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Build server Docker image
+          command: |
+            set -euo pipefail
+            docker build -f apps/server/Dockerfile -t tolaria-server:test .
+      - run:
+          name: Container smoke test
+          command: |
+            set -euo pipefail
+            # Create test remote
+            test_remote="$(mktemp -d)"
+            cd "$test_remote"
+            git init --bare -b main
+            temp_work="$(mktemp -d)"
+            cd "$temp_work"
+            git clone "$test_remote" .
+            echo "# Test Vault" > README.md
+            git add .
+            git config user.name "Test"
+            git config user.email "test@test.invalid"
+            git commit -m "Initial commit"
+            git push origin main
+            
+            # The container cannot see host paths: mount the bare remote and give it to the
+            # image's `node` user (UID 1000) so git's safe.directory ownership check passes.
+            sudo chown -R 1000:1000 "$test_remote"
+
+            # Start container
+            container_id=$(docker run -d \
+              -v "$test_remote:/test-remote.git" \
+              -e TOLARIA_SERVER_TOKEN=test-token-1234567890 \
+              -e TOLARIA_VAULT_REMOTE_URL=/test-remote.git \
+              -e TOLARIA_SERVER_ALLOW_NON_LOOPBACK=1 \
+              -p 8787:8787 \
+              tolaria-server:test)
+            
+            # Wait for readiness
+            for i in {1..30}; do
+              if curl -f http://localhost:8787/healthz 2>/dev/null; then
+                echo "Server ready"
+                break
+              fi
+              if [ $i -eq 30 ]; then
+                echo "Server failed to become ready"
+                docker logs "$container_id"
+                exit 1
+              fi
+              sleep 1
+            done
+            
+            # Test SIGTERM handling
+            docker kill --signal=SIGTERM "$container_id"
+            docker wait "$container_id"
+            
+            echo "Container smoke test passed"
+
+  web-build:
+    executor: node
+    # Builds apps/web/dist once and hands it to every web-gates container through the workspace
+    # (TOL-241), instead of each container building the same bundle.
+    steps:
+      - checkout
+      - skip_unless_changed:
+          scope: web-gates
+          ignore: "^(src-tauri/.*\\.rs|docs/(?!web/))"
+          paths: "^(apps/|packages/|src/|docs/web/)"
+      - install_frontend_dependencies
+      - run:
+          name: Build web bundle
+          command: pnpm build:web
+      - persist_to_workspace:
+          root: apps/web
+          paths:
+            - dist
+
+  web-server-tests:
+    executor: node
+    # The server tests run beside the Playwright shards rather than on one of them, so the
+    # timing-based split below keeps the containers even.
+    steps:
+      - checkout
+      - skip_unless_changed:
+          scope: web-gates
+          ignore: "^(src-tauri/.*\\.rs|docs/(?!web/))"
+          paths: "^(apps/|packages/|src/|docs/web/)"
+      - install_frontend_dependencies
+      - run:
+          name: Server tests with coverage
+          command: pnpm test:server
+
+  web-gates:
+    executor: browser
+    # Each container runs a timing-balanced set of web spec files (every project) on the bundle
+    # from web-build into a blob report; web-gates-report merges the blobs into one HTML/JUnit
+    # report and records the pass marker (containers in a parallel job cannot, see mark_validated).
+    parallelism: 6
+    steps:
+      - checkout
+      - skip_unless_changed:
+          scope: web-gates
+          ignore: "^(src-tauri/.*\\.rs|docs/(?!web/))"
+          paths: "^(apps/|packages/|src/|docs/web/)"
+      - attach_workspace:
+          at: apps/web
+      - install_frontend_dependencies
+      - restore_cache:
+          keys:
+            - playwright-v1-{{ checksum "pnpm-lock.yaml" }}
+            - playwright-v1-
+      - run:
+          name: Install Playwright browsers
+          command: pnpm exec playwright install --with-deps chromium webkit
+      - save_cache:
+          key: playwright-v1-{{ checksum "pnpm-lock.yaml" }}
+          paths:
+            - ~/.cache/ms-playwright
+      - run:
+          name: Web Playwright shard (Chromium, WebKit, iPhone, iPad, collab)
+          command: |
+            set -euo pipefail
+            test -f apps/web/dist/index.html
+            # Playwright's own --shard splits by test count in project order, which left one
+            # container with most of the WebKit run. Splitting whole spec files by the timings
+            # this job stored last time keeps the containers even; web-gates-report checks that
+            # the shards together ran every listed test.
+            mapfile -t specs < <(
+              cd apps/web/tests &&
+                find . -name '*.spec.ts' | sed 's#^\./##' | sort |
+                circleci tests split --split-by=timings --timings-type=classname --time-default=30s
+            )
+            if [[ "${#specs[@]}" -eq 0 ]]; then
+              echo "No spec files for container ${CIRCLE_NODE_INDEX}" >&2
+              exit 1
+            fi
+            printf 'Container %s specs:\n' "${CIRCLE_NODE_INDEX}"
+            printf '  %s\n' "${specs[@]}"
+            shard=$((CIRCLE_NODE_INDEX + 1))
+            PLAYWRIGHT_BLOB_OUTPUT_DIR=/tmp/web-blob-reports \
+            PLAYWRIGHT_BLOB_OUTPUT_NAME="report-${shard}.zip" \
+            PLAYWRIGHT_JUNIT_OUTPUT_FILE=/tmp/web-junit/results.xml \
+              pnpm playwright:web --reporter=dot,blob,junit "${specs[@]/#/apps/web/tests/}"
+      - store_test_results:
+          path: /tmp/web-junit
+      - persist_to_workspace:
+          root: /tmp/web-blob-reports
+          paths:
+            - report-*.zip
+      - store_artifacts:
+          path: test-results
+          destination: web-playwright
+
+  web-gates-report:
+    executor: node
+    resource_class: medium
+    steps:
+      - checkout
+      - skip_unless_changed:
+          scope: web-gates
+          ignore: "^(src-tauri/.*\\.rs|docs/(?!web/))"
+          paths: "^(apps/|packages/|src/|docs/web/)"
+      - attach_workspace:
+          at: /tmp/web-blob-reports
+      - install_frontend_dependencies
+      - run:
+          name: Merge web Playwright shard reports
+          command: |
+            set -euo pipefail
+            PLAYWRIGHT_HTML_OUTPUT_DIR=test-results/web-report \
+            PLAYWRIGHT_HTML_OPEN=never \
+            PLAYWRIGHT_JUNIT_OUTPUT_FILE=test-results/web-junit/results.xml \
+              pnpm exec playwright merge-reports --config apps/web/playwright.config.ts \
+                --reporter=html,junit /tmp/web-blob-reports
+      - run:
+          name: Check the shards ran every web test once
+          command: |
+            set -euo pipefail
+            listed="$(pnpm exec playwright test --config apps/web/playwright.config.ts --list |
+              sed -n 's/^Total: \([0-9]*\) tests\{0,1\} in .*/\1/p')"
+            merged="$(grep -o '<testsuites [^>]*' test-results/web-junit/results.xml |
+              sed -n 's/.* tests="\([0-9]*\)".*/\1/p')"
+            echo "Listed ${listed:-?} tests; the merged shard report has ${merged:-?}."
+            [[ -n "$listed" && "$listed" == "$merged" ]]
+      - store_artifacts:
+          path: test-results/web-report
+          destination: web-playwright-report
+      - store_artifacts:
+          path: test-results/web-junit
+          destination: web-playwright-junit
+      - mark_validated:
+          scope: web-gates
+
+  web-bench:
+    executor: browser
+    # TOL-225: the 6,000-note big-vault bench (docs/PERFORMANCE.md), in parallel with
+    # web-gates. Fails when a measurement is over its budget; the table is in the step log
+    # and the web-bench artifact.
+    steps:
+      - checkout
+      - skip_unless_changed:
+          scope: web-bench
+          paths: "^(apps/web/|apps/server/|packages/|src/|public/|index\\.html|vite\\.config\\.ts|tsconfig|package\\.json|pnpm-lock\\.yaml)"
+      - install_frontend_dependencies
+      - restore_cache:
+          keys:
+            - playwright-v1-{{ checksum "pnpm-lock.yaml" }}
+            - playwright-v1-
+      - run:
+          name: Install Playwright Chromium
+          command: pnpm exec playwright install --with-deps chromium
+      - run:
+          name: Build web bundle
+          command: pnpm build:web
+      - run:
+          name: Big-vault web bench (6,000 notes)
+          command: pnpm bench:web
+      - store_artifacts:
+          path: test-results/web-bench
+          destination: web-bench
+      - mark_validated:
+          scope: web-bench
+
   linux-build-verification:
     machine:
       image: ubuntu-2204:current
@@ -1638,6 +1865,47 @@ workflows:
           filters:
             branches:
               only: main
+            tags:
+              ignore: /.*/
+      - server-docker-build:
+          filters:
+            branches:
+              ignore: gh-pages
+            tags:
+              ignore: /.*/
+      - web-build:
+          filters:
+            branches:
+              ignore: gh-pages
+            tags:
+              ignore: /.*/
+      - web-server-tests:
+          filters:
+            branches:
+              ignore: gh-pages
+            tags:
+              ignore: /.*/
+      - web-gates:
+          requires:
+            - web-build
+          filters:
+            branches:
+              ignore: gh-pages
+            tags:
+              ignore: /.*/
+      - web-gates-report:
+          requires:
+            - web-gates
+            - web-server-tests
+          filters:
+            branches:
+              ignore: gh-pages
+            tags:
+              ignore: /.*/
+      - web-bench:
+          filters:
+            branches:
+              ignore: gh-pages
             tags:
               ignore: /.*/
       - linux-build-verification:

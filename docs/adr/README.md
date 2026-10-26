@@ -273,3 +273,23 @@ proposed → active → superseded
 | [0269](0269-mobile-ota-validated-main-range.md) | Mobile OTA validated main range | active |
 | [0270](0270-expiring-exact-codacy-approval-records.md) | Expiring exact Codacy approval records | temporary; expires 2026-10-21 |
 | [0271](0271-mobile-revisioned-pending-note-indicators.md) | Mobile revisioned pending-note indicators | active |
+| [0277](0277-mobile-read-only-reload-reconciliation.md) | Reconcile read-only mobile reloads in the existing snapshot frame | active |
+| [0278](0278-desktop-note-save-byte-transport.md) | Desktop note saves use UTF-8 byte transport | active |
+| [0279](0279-mobile-preview-configuration-tolerance.md) | Mobile preview configuration tolerance | active |
+| [0280](0280-debounced-push-and-background-fetch.md) | Debounced push and background fetch for Tolaria remote | active |
+| [0282](0282-web-offline-read-service-worker.md) | Web offline read with a hand-written, per-account service worker | active |
+| [0283](0283-web-attachments-portable-paths-and-guarded-import.md) | Web attachments: portable paths, token-authorized object URLs and a server-side guarded image import | active |
+| [0284](0284-web-url-routing-with-query-routes.md) | Web URL routing with query routes over the History API | active |
+| [0285](0285-mobile-disk-authoritative-note-editing-and-index-reconciliation.md) | Disk-authoritative mobile note editing and index reconciliation | active |
+| [0286](0286-web-phone-layout-as-a-url-driven-pane-stack.md) | Web phone layout as a URL-driven pane stack | active |
+| [0287](0287-web-tablet-layout-and-browser-safe-shortcuts.md) | Web tablet layout and browser-safe shortcuts | active |
+| [0288](0288-web-touch-input-long-press-menus-and-touch-targets.md) | Web touch input: long-press menus and 44 px touch targets | active |
+| [0289](0289-server-rename-transaction-with-live-link-patches.md) | Server rename transaction with live wikilink patches | active |
+| [0290](0290-live-document-keeps-its-edits-on-a-desktop-conflict.md) | A live document keeps its edits on a desktop conflict; the incoming version becomes the conflict copy | active |
+| [0291](0291-presence-in-the-web-note-view.md) | Presence in the web note view: device names, paced awareness, clear within 5 s | active |
+| [0292](0292-in-process-request-and-websocket-limits-on-the-server.md) | In-process request and websocket limits on the server, per account | active |
+| [0293](0293-folder-create-and-delete-on-the-server.md) | Folders created on the server hold a .keep file; folder deletes take every file in one commit | active |
+| [0294](0294-web-build-error-telemetry-and-hidden-source-maps.md) | Web build error telemetry: build-time DSN, commit releases and hidden source maps | active |
+| [0295](0295-mobile-note-reads-during-linked-folder-sync.md) | Mobile note reads during linked-folder sync | active |
+| [0296](0296-sharing-enforced-in-the-server-with-signed-access-tickets.md) | Sharing is enforced in the open server with signed, short-lived access tickets; share records stay with the front end | active |
+| [0297](0297-collaborator-attribution-in-co-authored-by-trailers.md) | Shared edits name their collaborators in Co-authored-by trailers; the identity comes from the access ticket | active |

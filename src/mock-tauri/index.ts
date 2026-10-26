@@ -7,10 +7,15 @@
 import { MOCK_CONTENT } from './mock-content'
 import { mockHandlers, addMockEntry, updateMockContent, trackMockChange } from './mock-handlers'
 import { tryVaultApi } from './vault-api'
+import { assertVaultWritable } from '../lib/offline/offlineMode'
+import { resolveBrowserBackendKind } from '../lib/platformCapabilities'
 
 export { addMockEntry, updateMockContent, trackMockChange }
 
 type MockHandler = (args?: unknown) => unknown
+
+/** Simulated IPC round trip for demo data. */
+const MOCK_IPC_LATENCY_MS = 100
 
 function registerMockHandlers(): Record<string, MockHandler> {
   return Object.fromEntries(
@@ -44,13 +49,28 @@ function resolveMockHandler(command: string) {
   return windowHandler ?? Reflect.get(registeredMockHandlers, command) as MockHandler | undefined
 }
 
+/** Commands that change the vault. Offline on the web they fail loudly instead of piling up here. */
+const VAULT_WRITE_COMMANDS = new Set([
+  'save_note_content', 'save_image', 'copy_image_to_vault', 'download_remote_image_to_vault',
+  'rename_note', 'rename_note_filename', 'move_note_to_folder', 'move_note_to_workspace', 'sync_note_title',
+  'delete_note', 'batch_delete_notes', 'batch_archive_notes', 'batch_trash_notes', 'purge_trash', 'empty_trash',
+  'migrate_is_a_to_type', 'save_view_cmd', 'delete_view_cmd', 'repair_vault',
+])
+
+/** On a Tolaria remote the stand-ins answer at once: a fake delay here held startup back (TOL-206). */
+async function simulateIpcLatency(): Promise<void> {
+  if (resolveBrowserBackendKind() === 'remote') return
+  await new Promise((r) => setTimeout(r, MOCK_IPC_LATENCY_MS))
+}
+
 export async function mockInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  if (VAULT_WRITE_COMMANDS.has(cmd)) assertVaultWritable('saving changes')
   const vaultResult = await tryVaultApi<T>(cmd, args)
   if (vaultResult !== undefined) return vaultResult
 
   const handler = resolveMockHandler(cmd)
   if (handler) {
-    await new Promise((r) => setTimeout(r, 100))
+    await simulateIpcLatency()
     return handler(args) as T
   }
   throw new Error(`No mock handler for command: ${cmd}`)
